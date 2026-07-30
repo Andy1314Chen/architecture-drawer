@@ -1,0 +1,39 @@
+{
+  "name": "svg-architecture-drawer",
+  "owner": {
+    "name": "conne",
+    "url": "https://github.com/conne"
+  },
+  "metadata": {
+    "description": "Draw multi-layered technical architecture diagrams as SVG and export them to editable PowerPoint.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "svg-architecture-drawer",
+      "source": "./plugins/svg-architecture-drawer/",
+      "description": "Generate complex, multi-layered technical architecture SVGs with layout validation and editable-PPTX export.",
+      "version": "1.0.0",
+      "author": {
+        "name": "conne",
+        "url": "https://github.com/conne"
+      },
+      "homepage": "https://github.com/conne/svg-architecture-drawer",
+      "repository": "https://github.com/conne/svg-architecture-drawer",
+      "license": "MIT",
+      "keywords": [
+        "svg",
+        "architecture",
+        "diagram",
+        "powerpoint",
+        "pptx",
+        "visualization",
+        "layout"
+      ],
+      "category": "workflows",
+      "skills": [
+        "./skills/svg-architecture-drawer"
+      ]
+    }
+  ]
+}

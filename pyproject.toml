@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+# Runtime dependency: python-pptx (SVG -> editable PPTX export).
+# Test dependency: pytest.
+# System dependency: rsvg-convert (SVG -> PNG rasterization).
+#
+# Install for development:
+#   pip install -r requirements.txt -r requirements-dev.txt

@@ -1,0 +1,2 @@
+# Runtime dependency for the editable-PPTX export module (scripts/svg2pptx.py).
+python-pptx>=1.0

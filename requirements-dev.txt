@@ -1,0 +1,3 @@
+-r requirements.txt
+# Regression test runner.
+pytest>=8

@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Generated diagram artifacts (regenerable). The gen.py scripts co-located in
+# evals/<name>/ and examples/<name>/ stay version-controlled; only their
+# SVG/PNG/PPTX outputs are ignored.
+plugins/**/*.svg
+plugins/**/*.png
+plugins/**/*.pptx
+examples/**/*.svg
+examples/**/*.png
+examples/**/*.pptx
