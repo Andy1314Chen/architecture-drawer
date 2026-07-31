@@ -3,11 +3,11 @@
   "description": "Turn a text description of a system architecture into a multi-layered SVG diagram, validated by a 13-dimension quality evaluator, then exported to editable PowerPoint.",
   "version": "1.0.0",
   "author": {
-    "name": "conne",
-    "url": "https://github.com/conne"
+    "name": "Andy1314Chen",
+    "url": "https://github.com/Andy1314Chen"
   },
-  "homepage": "https://github.com/conne/architecture-drawer",
-  "repository": "https://github.com/conne/architecture-drawer",
+  "homepage": "https://github.com/Andy1314Chen/architecture-drawer",
+  "repository": "https://github.com/Andy1314Chen/architecture-drawer",
   "license": "MIT",
   "keywords": [
     "svg",

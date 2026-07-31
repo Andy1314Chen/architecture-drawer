@@ -59,14 +59,14 @@ Suggested workflow: first discuss with DeepWiki or your agent to produce a clear
 This repo is a [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces). Add it and install the plugin:
 
 ```
-/plugin marketplace add conne/architecture-drawer
+/plugin marketplace add Andy1314Chen/architecture-drawer
 /plugin install architecture-drawer@architecture-drawer
 ```
 
 Or from the CLI:
 
 ```bash
-claude plugin marketplace add conne/architecture-drawer
+claude plugin marketplace add Andy1314Chen/architecture-drawer
 claude plugin install architecture-drawer@architecture-drawer
 ```
 

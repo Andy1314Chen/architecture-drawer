@@ -60,14 +60,14 @@
 本项目已上架 [Claude Code 插件市场](https://code.claude.com/docs/en/plugin-marketplaces)。添加并安装：
 
 ```
-/plugin marketplace add conne/architecture-drawer
+/plugin marketplace add Andy1314Chen/architecture-drawer
 /plugin install architecture-drawer@architecture-drawer
 ```
 
 或通过 CLI：
 
 ```bash
-claude plugin marketplace add conne/architecture-drawer
+claude plugin marketplace add Andy1314Chen/architecture-drawer
 claude plugin install architecture-drawer@architecture-drawer
 ```
 
