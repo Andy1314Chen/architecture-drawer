@@ -2,18 +2,17 @@
 
 English · [简体中文](README.zh_CN.md)
 
-A skill for [Claude Code](https://code.claude.com), Codex, and other AI coding agents: describe your system architecture in plain text, and it generates a **multi-layered technical architecture diagram as SVG**, validates the layout with a 13-dimension quality evaluator, and exports to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
+A skill for [Claude Code](https://code.claude.com), Codex, Open Code, Pi Agent, and other AI coding agents: describe your system architecture in plain text, and it generates a **multi-layered technical architecture diagram as SVG**, validates the layout with a 13-dimension quality evaluator, and exports to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
 
-> Draw architecture diagrams in SVG. Export to editable PowerPoint.
+> Draw architecture diagrams with the skill. Export to editable PowerPoint.
 
-[![Tests](https://github.com/conne/architecture-drawer/actions/workflows/test.yml/badge.svg)](https://github.com/conne/architecture-drawer/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
 ## What it does
 
-- **Author diagrams in code** — a fluent Python API (`SVGDrawer`) places rects, circles, shapes, text, and connectors with semantic node/edge registration.
+- **Author diagrams in code** — the agent uses a fluent Python API (`SVGDrawer`) to place rects, circles, shapes, text, and connectors with semantic node/edge registration.
 - **Validate, don't assert** — a 13-check `evaluate_svg` parses the *rendered* SVG (not the API calls) to score collision, boundary, coverage, connection landing, phantom anchors, edge-through-node, crossings, spacing, font tiers, palette, text overflow, composition budget, and text-vs-shape overlaps.
 - **Export to editable PPTX** — `svg_to_pptx` maps each SVG element to a native PowerPoint shape (rect→rectangle, circle→oval, line→connector, path→freeform, text→textbox), with arrow rendering, Bezier flattening, and transparency/dash injection. An image-rasterization fallback mode is included.
 - **Generate → Evaluate → Correct** workflow with `auto_refine` for iterative layout cleanup.
@@ -22,7 +21,7 @@ A skill for [Claude Code](https://code.claude.com), Codex, and other AI coding a
 
 All diagrams below were generated entirely from text descriptions by the skill, then scored by the 13-dimension evaluator (each scored ≥76/100). They double as the regression suite under `evals/`.
 
-### vLLM — High-Throughput LLM Serving with PagedAttention
+### vLLM — High-Throughput LLM Inference Serving (PagedAttention)
 
 ![](docs/showcase/vllm_arch.png)
 
@@ -42,10 +41,12 @@ Five horizontal layers (application → orchestration → core capabilities → 
 
 ## Best Practices
 
-1. **Start with a clear text description.** Before coding, write down the architecture in prose—layers, components, connections, and any special annotations. A crisp text spec (like the specs in `evals/*/input.md`) is the single biggest predictor of a quality diagram.
-2. **Let the skill do the heavy lifting.** Feed your text spec to the skill (or `pytest --llm-replay`) and let it generate the initial `gen.py` + SVG. Resist the urge to hand-code coordinates; the evaluator loop catches overlaps, dangles, and crossings automatically.
-3. **Review the score.** If the score is ≥80, you have a structurally sound diagram. If <80, let `auto_refine` or multi-round LLM correction (`--llm-iter`) fix the geometry first.
-4. **Export to PPTX for final polish.** Run `svg_to_pptx()` to get an editable PowerPoint file. That's where you tweak colors, fonts, arrows, and layout to match your brand or publication style—changes that belong in the presentation layer, not the generator code.
+1. **Start with a clear text description.** Before coding, describe the architecture in prose—how many layers, what components each layer has, how they connect, and any special annotations. A crisp text spec (like the specs in `evals/*/input.md`) is the single biggest predictor of a quality diagram. For open-source projects, you can use the system architecture description from [DeepWiki](https://deepwiki.com).
+2. **Let the skill generate.** Submit the text description to the skill and let it generate the initial `gen.py` and SVG. The evaluator automatically catches overlaps, dangles, and crossings.
+3. **The skill auto-reviews the score.** If the score is ≥80, the diagram is structurally sound. If <80, the agent can automatically fix layout issues via `auto_refine` or multi-round LLM correction (`--llm-iter`).
+4. **Export to PPTX for final polish.** Run `svg_to_pptx()` to get an editable PowerPoint file. Tweak colors, fonts, arrows, and layout there to match your brand or publication style—these belong in the presentation layer, not the generator code.
+
+The recommended workflow: first have a multi-round discussion with DeepWiki or your agent to produce a text description of the system architecture, then use this skill to quickly generate a PPTX architecture diagram. Finally, fine-tune colors, labels, and other details manually as needed. Compared to direct image generation tools like Nano Banana or GPT-Image, this approach is simpler, more controllable, lower-cost, and allows for further manual refinement.
 
 ## Install (Claude Code)
 
@@ -63,7 +64,7 @@ claude plugin marketplace add conne/architecture-drawer
 claude plugin install architecture-drawer@architecture-drawer
 ```
 
-Scope with `--scope project` (shared via VCS) or `--scope local` (gitignored). Default is `user`.
+Scope with `--scope project` (shared via version control) or `--scope local` (gitignored). Default is `user`.
 
 ### Codex CLI
 
@@ -132,29 +133,6 @@ architecture-drawer/
 │   └── golden/*.svg                             # snapshot baselines
 └── examples/                                    # minimal demo of the generate-evaluate-export loop
 ```
-
-## Regression test suite
-
-The 7 diagrams under `evals/` double as a regression suite. Each `gen.py` is run as a subprocess; its printed quality score must meet a per-case threshold, and its rendered SVG must match a golden snapshot under `tests/golden/`.
-
-```bash
-pip install -r requirements.txt -r requirements-dev.txt
-pytest                      # 7 tests, all green
-pytest --regenerate-golden  # refresh snapshots after an accepted change
-```
-
-The suite **locks in current quality** — it catches degradation, it does not retroactively raise the bar on legacy generators written before later-added checks (e.g. text-overlap). Bump a threshold only after intentionally improving that generator.
-
-### LLM replay (opt-in, non-deterministic)
-
-The default suite tests the **engine** (SVGDrawer + evaluator + svg2pptx) against frozen `gen.py` scripts. To also test the skill's core promise — *turn a text description into a compliant diagram* — each eval ships an `input.md` spec. Run the LLM replay gate:
-
-```bash
-pytest --llm-replay                 # multi-round: generate -> evaluate -> correct
-pytest --llm-replay --llm-iter 5    # allow more correction rounds (default 3)
-```
-
-This mirrors a real Claude Code session using the skill: an LLM generates an initial `gen.py` from **only** `input.md` + `SKILL.md` (anti-leakage — the golden SVG is never provided), runs it, and if the score is below target or there are `[FAIL]` items, feeds the evaluator report back to the LLM for a fix (coordinates/layout adjustments — exactly what `auto_refine` cannot do), looping until target or max rounds. Asserts the best score clears a flat floor (≥80). Requires the `claude` CLI. Run locally or nightly, **not** in the PR gate.
 
 ## References & acknowledgments
 

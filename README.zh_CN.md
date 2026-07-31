@@ -1,10 +1,10 @@
 # architecture-drawer
 
-一个面向 [Claude Code](https://code.claude.com)、Codex 等 AI 编程助手的 Skill：用自然语言描述你的系统架构，即可生成**多层技术架构 SVG 图**，经 13 维质量评估器验证布局，并导出为**可编辑的 PowerPoint**（`pptx`）——每个形状都是原生的、可调整大小的 PPT 元素，而非扁平化图片。
+一个面向 [Claude Code](https://code.claude.com)、Codex、Open Code、Pi Agent 等 AI 编程助手的 Skill：用自然语言描述你的系统架构，即可生成**多层技术架构 SVG 图**，并且经 13 维质量评估器自动验证布局，并导出为**可编辑的 PowerPoint**（`pptx`）——每个形状都是原生的、可调整大小的 PPT 元素，而非扁平化图片。
 
-> 用代码画架构图。导出为可编辑 PPT。
+> 用 Skill 画架构图，导出为可编辑 PPT。
 
-[![Tests](https://github.com/conne/architecture-drawer/actions/workflows/test.yml/badge.svg)](https://github.com/conne/architecture-drawer/actions/workflows/test.yml)
+
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 [English](README.md) · 简体中文
@@ -13,7 +13,7 @@
 
 ## 功能概览
 
-- **用代码绘制** —— 通过流式 Python API（`SVGDrawer`）放置矩形、圆形、文本和连接器，并自动注册语义节点/边。
+- **用代码绘制** —— Agent 通过流式 Python API（`SVGDrawer`）放置矩形、圆形、文本和连接器，并自动注册语义节点/边。
 - **验证而非断言** —— `evaluate_svg` 解析**实际渲染的 SVG**（而非 API 调用本身），对碰撞、边界、覆盖率、连接落点、幽灵锚点、边穿节点、交叉、间距、字体层级、配色、文本溢出、构图预算以及文本-形状重叠等 13 个维度打分。
 - **导出可编辑 PPTX** —— `svg_to_pptx` 将每个 SVG 元素映射为原生 PowerPoint 形状（矩形→矩形、圆形→椭圆、直线→连接器、路径→自由曲线、文本→文本框），支持箭头渲染、贝塞尔曲线摊平以及透明度/虚线注入。同时提供图片栅格化降级模式。
 - **生成 → 评估 → 修正** 工作流，内置 `auto_refine` 自动迭代修正布局问题（间距、边距等）。
@@ -22,7 +22,7 @@
 
 下列架构图均由 skill 完全根据文本描述生成，并经 13 维评估器打分（每张 ≥76/100）。它们同时作为 `evals/` 下的回归测试用例。
 
-### vLLM —— 高吞吐 LLM 服务（PagedAttention）
+### vLLM —— 高吞吐 LLM 推理服务（PagedAttention）
 
 ![](docs/showcase/vllm_arch.png)
 
@@ -42,10 +42,12 @@
 
 ## 最佳实践
 
-1. **先想清楚架构的文字版描述。** 在写代码之前，用自然语言把架构讲清楚——分几层、每层有哪些组件、它们之间怎么连接、有没有特殊标注。一份清晰的文字描述（如 `evals/*/input.md` 中的规格）是高质量图表最大的前提。
-2. **让 skill 自动生成。** 将文本规格提交给 skill（或运行 `pytest --llm-replay`），让它生成初始 `gen.py` 和 SVG。不要手写坐标；评估器会自动捕获重叠、连接错位和交叉等问题。
-3. **审查分数。** 如果分数 ≥80，说明图表结构合理。如果 <80，先用 `auto_refine` 或多轮 LLM 修正（`--llm-iter`）自动修复几何问题。
+1. **先想清楚架构的文字版描述。** 在写代码之前，用自然语言把架构讲清楚——分几层、每层有哪些组件、它们之间怎么连接、有没有特殊标注。一份清晰的文字描述（如 `evals/*/input.md` 中的规格）是高质量图表最大的前提。对于开源项目，可以直接使用 deepwiki 描述的系统架构文字描述。
+2. **让 skill 自动生成。** 将系统架构文字描述提交给 skill，让它生成初始 `gen.py` 和 SVG。评估器会自动捕获重叠、连接错位和交叉等问题。
+3. **skill 自动审查分数。** 如果分数 ≥80，说明图表结构合理。如果 <80，Agent 能自动用 `auto_refine` 或多轮 LLM 修正（`--llm-iter`）自动修复布局问题。
 4. **导出 PPTX 做最终润色。** 运行 `svg_to_pptx()` 获得可编辑的 PowerPoint 文件。在那里调整配色、字体、箭头和布局以匹配品牌或出版风格——这些属于展示层，而非生成器代码的工作。
+
+建议第一步可以和 deepwiki 或者 Agent 进行多轮讨论，给出系统架构的文字描述，然后使用该 Skill 快速自动出一版 PPTX 格式的系统架构图。最后，根据实际需求，人工再进一步精细地微调配色、图中文字等等。相对 Nano Banana 或 GPT-Image2 等直接出图，当前项目更简单、可控性更高、成本更低且可以人工手动做进一步的微调。
 
 ## 安装
 
@@ -137,28 +139,7 @@ architecture-drawer/
 └── examples/                                    # 生成-评估-导出循环的最小示例
 ```
 
-## 回归测试套件
 
-`evals/` 下的 7 张图同时作为回归测试用例。每个 `gen.py` 以子进程运行；其打印的质量评分必须达到该用例的阈值，且渲染后的 SVG 必须与 `tests/golden/` 下的快照匹配。
-
-```bash
-pip install -r requirements.txt -r requirements-dev.txt
-pytest                      # 7 个测试，全绿
-pytest --regenerate-golden  # 接受变更后刷新快照
-```
-
-测试套件**锁定当前质量水平**——它用于捕捉退化，而非在新增检查（如文本重叠）后追溯惩罚旧生成器。只有在有意改进某个生成器后，才手动提升其阈值。
-
-### LLM 回放（可选、非确定性）
-
-默认测试套件验证**引擎层**（SVGDrawer + 评估器 + svg2pptx）对冻结的 `gen.py` 的稳定性。若要同时验证 skill 的核心能力——*从文本描述生成合规架构图*——每个 eval 附带 `input.md` 文本规格。运行 LLM 回放：
-
-```bash
-pytest --llm-replay                 # 多轮：生成 -> 评估 -> 修正
-pytest --llm-replay --llm-iter 5    # 允许更多修正轮次（默认 3）
-```
-
-回放流程模拟真实 Claude Code 会话：LLM **仅**根据 `input.md` + `SKILL.md`（防泄露——golden SVG 绝不提供）生成初始 `gen.py`，执行后若分数低于目标或有 `[FAIL]` 项，就把评估报告反馈给 LLM 让它修坐标/布局（正是 `auto_refine` 做不到的语义决策），循环直到达标或轮次用尽。断言最佳分数通过统一底线（≥80）。需要 `claude` CLI。在本地或夜间运行，**不**进 PR 门禁。
 
 ## 鸣谢
 
