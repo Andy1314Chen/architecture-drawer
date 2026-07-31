@@ -1,6 +1,6 @@
 # architecture-drawer
 
-一个 [Claude Code](https://code.claude.com) Skill（同时也是独立的 Python 库），用于生成**多层技术架构 SVG 图**，并通过 13 维质量评估器验证布局，最终导出为**可编辑的 PowerPoint**（`pptx`）——每个形状都是原生的、可调整大小的 PPT 元素，而非扁平化图片。
+一个面向 [Claude Code](https://code.claude.com)、Codex 等 AI 编程助手的 Skill：用自然语言描述你的系统架构，即可生成**多层技术架构 SVG 图**，经 13 维质量评估器验证布局，并导出为**可编辑的 PowerPoint**（`pptx`）——每个形状都是原生的、可调整大小的 PPT 元素，而非扁平化图片。
 
 > 用代码画架构图。导出为可编辑 PPT。
 
@@ -13,10 +13,10 @@
 
 ## 功能概览
 
-- **代码即蓝图** —— 通过流式 Python API（`SVGDrawer`）放置矩形、圆形、文本和连接器，并自动注册语义节点/边。
+- **用代码绘制** —— 通过流式 Python API（`SVGDrawer`）放置矩形、圆形、文本和连接器，并自动注册语义节点/边。
 - **验证而非断言** —— `evaluate_svg` 解析**实际渲染的 SVG**（而非 API 调用本身），对碰撞、边界、覆盖率、连接落点、幽灵锚点、边穿节点、交叉、间距、字体层级、配色、文本溢出、构图预算以及文本-形状重叠等 13 个维度打分。
 - **导出可编辑 PPTX** —— `svg_to_pptx` 将每个 SVG 元素映射为原生 PowerPoint 形状（矩形→矩形、圆形→椭圆、直线→连接器、路径→自由曲线、文本→文本框），支持箭头渲染、贝塞尔曲线摊平以及透明度/虚线注入。同时提供图片栅格化降级模式。
-- **生成 → 评估 → 修正** 工作流，内置 `auto_refine` 实现迭代式几何清理。
+- **生成 → 评估 → 修正** 工作流，内置 `auto_refine` 自动迭代修正布局问题（间距、边距等）。
 
 ## 样例展示
 
@@ -106,33 +106,9 @@ Codex 会自动读取 `SKILL.md` 中的工作流规范并执行生成 → 评估
 cp -r plugins/architecture-drawer/skills/architecture-drawer .agents/skills/architecture-drawer
 ```
 
-### 作为 Python 库使用（无需 Claude）
+## 依赖
 
-`.../skills/architecture-drawer/scripts/` 下的三个模块（`svg_utils.py`、`evaluator.py`、`svg2pptx.py`）是纯 Python 文件，直接加入 `sys.path` 即可导入：
-
-```python
-import sys
-sys.path.insert(0, "path/to/architecture-drawer/plugins/architecture-drawer/skills/architecture-drawer/scripts")
-
-from svg_utils import SVGDrawer, save_svg, rasterize_svg
-from evaluator import evaluate_svg
-from svg2pptx import svg_to_pptx
-
-d = SVGDrawer(1200, 800, bg="#FFFFFF")
-d.arrow_head("arrow", "#333")
-d.rect(100, 100, 120, 40, fill="#D5E1EB", stroke="#1B3A5C", node_id="a")
-d.rect(300, 100, 120, 40, fill="#D5E1EB", stroke="#1B3A5C", node_id="b")
-d.connect("a", "right", "b", "left", stroke="#1B3A5C", marker_end="arrow")
-
-score, report = evaluate_svg(d)
-print(f"质量评分: {score}")
-
-save_svg(d.render(), "diagram.svg")
-rasterize_svg("diagram.svg", "diagram.png", width=1200)
-svg_to_pptx(d.render(), "diagram.pptx")   # 原生可编辑形状
-```
-
-### 依赖
+Agent 生成的 `gen.py` 会导入 skill 内的三个纯 Python 模块（`svg_utils.py`、`evaluator.py`、`svg2pptx.py`）。你无需手写这些代码——Agent 会完成。只需安装以下依赖，生成的图表就能渲染和导出：
 
 | 依赖 | 用途 | 安装 |
 |---|---|---|
@@ -158,7 +134,7 @@ architecture-drawer/
 │   ├── test_regression.py
 │   ├── test_skill_spec.py                       # Agent Skills 规范合规检测
 │   └── golden/*.svg                             # 快照基线
-└── examples/                                    # 最小化独立使用示例
+└── examples/                                    # 生成-评估-导出循环的最小示例
 ```
 
 ## 回归测试套件

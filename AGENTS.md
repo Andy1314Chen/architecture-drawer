@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A [Claude Code](https://code.claude.com) skill and standalone Python library that generates **multi-layered technical architecture diagrams as SVG**, validates their layout with a 13-dimension quality evaluator, and exports them to **editable PowerPoint** (PPTX) — every shape becomes a native, resizable PPT element.
+A skill for [Claude Code](https://code.claude.com), Codex, and other AI coding agents that turns text descriptions into **multi-layered technical architecture diagrams as SVG**, validates their layout with a 13-dimension quality evaluator, and exports them to **editable PowerPoint** (PPTX) — every shape becomes a native, resizable PPT element.
 
 Core value proposition: draw architecture diagrams in code via a fluent Python API, validate the rendered SVG (not just the API calls), and export to native editable shapes.
 
@@ -24,7 +24,7 @@ Three-layer pipeline:
 | `plugins/architecture-drawer/skills/architecture-drawer/evals/` | 13 regression generators, each in its own `gen.py` |
 | `plugins/architecture-drawer/skills/architecture-drawer/references/` | Preset color schemes (S1–S4) in `design_specs.md` |
 | `tests/` | pytest suite: spec compliance + regression snapshots |
-| `examples/` | Standalone usage demo (`hello_arch.py`) |
+| `examples/` | Minimal demo of the generate-evaluate-export loop (`hello_arch.py`) |
 | `.github/workflows/` | CI configuration |
 
 ## Development Commands
@@ -42,7 +42,7 @@ pytest --regenerate-golden
 # Run a single eval generator
 python plugins/architecture-drawer/skills/architecture-drawer/evals/20260730_vllm_arch/gen.py
 
-# Run standalone example
+# Run the demo (generate-evaluate-export)
 python examples/hello_arch.py
 ```
 

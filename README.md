@@ -2,7 +2,7 @@
 
 English · [简体中文](README.zh_CN.md)
 
-A [Claude Code](https://code.claude.com) skill (and standalone Python library) that generates **multi-layered technical architecture diagrams as SVG**, validates their layout with a 13-dimension quality evaluator, and exports them to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
+A skill for [Claude Code](https://code.claude.com), Codex, and other AI coding agents: describe your system architecture in plain text, and it generates a **multi-layered technical architecture diagram as SVG**, validates the layout with a 13-dimension quality evaluator, and exports to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
 
 > Draw architecture diagrams in SVG. Export to editable PowerPoint.
 
@@ -16,7 +16,7 @@ A [Claude Code](https://code.claude.com) skill (and standalone Python library) t
 - **Author diagrams in code** — a fluent Python API (`SVGDrawer`) places rects, circles, shapes, text, and connectors with semantic node/edge registration.
 - **Validate, don't assert** — a 13-check `evaluate_svg` parses the *rendered* SVG (not the API calls) to score collision, boundary, coverage, connection landing, phantom anchors, edge-through-node, crossings, spacing, font tiers, palette, text overflow, composition budget, and text-vs-shape overlaps.
 - **Export to editable PPTX** — `svg_to_pptx` maps each SVG element to a native PowerPoint shape (rect→rectangle, circle→oval, line→connector, path→freeform, text→textbox), with arrow rendering, Bezier flattening, and transparency/dash injection. An image-rasterization fallback mode is included.
-- **Generate → Evaluate → Correct** workflow with `auto_refine` for iterative geometric cleanup.
+- **Generate → Evaluate → Correct** workflow with `auto_refine` for iterative layout cleanup.
 
 ## Showcase
 
@@ -102,33 +102,9 @@ Each skill is a standalone [Agent Skills spec](https://agentskills.io) directory
 cp -r plugins/architecture-drawer/skills/architecture-drawer .agents/skills/architecture-drawer
 ```
 
-## Use as a Python library (no Claude required)
+## Dependencies
 
-The three modules under `.../skills/architecture-drawer/scripts/` (`svg_utils.py`, `evaluator.py`, `svg2pptx.py`) are plain Python — drop them on `sys.path` and import directly:
-
-```python
-import sys
-sys.path.insert(0, "path/to/architecture-drawer/plugins/architecture-drawer/skills/architecture-drawer/scripts")
-
-from svg_utils import SVGDrawer, save_svg, rasterize_svg
-from evaluator import evaluate_svg
-from svg2pptx import svg_to_pptx
-
-d = SVGDrawer(1200, 800, bg="#FFFFFF")
-d.arrow_head("arrow", "#333")
-d.rect(100, 100, 120, 40, fill="#D5E1EB", stroke="#1B3A5C", node_id="a")
-d.rect(300, 100, 120, 40, fill="#D5E1EB", stroke="#1B3A5C", node_id="b")
-d.connect("a", "right", "b", "left", stroke="#1B3A5C", marker_end="arrow")
-
-score, report = evaluate_svg(d)
-print(f"Quality Score: {score}")
-
-save_svg(d.render(), "diagram.svg")
-rasterize_svg("diagram.svg", "diagram.png", width=1200)
-svg_to_pptx(d.render(), "diagram.pptx")   # editable native shapes
-```
-
-### Dependencies
+The agent generates a `gen.py` that imports three pure-Python modules (`svg_utils.py`, `evaluator.py`, `svg2pptx.py`) co-located in the skill. You don't write this code — the agent does. Install these once so generated diagrams can render and export:
 
 | Dependency | Required by | Install |
 |---|---|---|
@@ -154,7 +130,7 @@ architecture-drawer/
 │   ├── test_regression.py
 │   ├── test_skill_spec.py                       # Agent Skills spec compliance
 │   └── golden/*.svg                             # snapshot baselines
-└── examples/                                    # minimal standalone usage examples
+└── examples/                                    # minimal demo of the generate-evaluate-export loop
 ```
 
 ## Regression test suite
