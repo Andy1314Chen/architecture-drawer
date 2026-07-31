@@ -1,6 +1,6 @@
 ---
 name: architecture-drawer
-description: Generates complex, multi-layered technical architecture SVGs from text descriptions. Features intelligent layout constraints, overlap detection, connection/arrow validation, and quality evaluation to ensure professional, polished output.
+description: Use when asked to draw system architecture diagrams, generate technical architecture SVGs, or export architecture diagrams to editable PowerPoint presentations. Supports multi-layer diagrams with automatic layout validation and scoring (13-dimension evaluator catches collisions, overlaps, dangles, crossings, palette issues).
 ---
 
 # SVG Architecture Drawer (Smart Version)
@@ -21,6 +21,18 @@ if _SKILL not in sys.path:
 ```
 
 ## Core Workflow: Generate-Evaluate-Correct
+
+```dot
+digraph eval_loop {
+    "Generate gen.py" -> "evaluate_svg()" [label="run"];
+    "evaluate_svg()" -> "score≥100 AND no [FAIL]?" [label="score"];
+    "score≥100 AND no [FAIL]?" -> "Done" [label="yes"];
+    "score≥100 AND no [FAIL]?" -> "auto_refine(drawer, max_iter=3)" [label="no"];
+    "auto_refine(drawer, max_iter=3)" -> "score≥80?" [label="after n iterations"];
+    "score≥80?" -> "Manual fix (coordinates/text)" [label="yes · ship"] ;
+    "score≥80?" -> "Regenerate gen.py" [label="no · restart"];
+}
+```
 
 1. **Content Parsing & Planning**:
    - Identify layers, components, and flow direction.

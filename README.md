@@ -40,6 +40,13 @@ A 4-layer × multi-column matrix (graph optimization → transformation → lowe
 
 Five horizontal layers (application → orchestration → core capabilities → execution → infrastructure) with a cross-cutting security/observability band. Bilingual CN/EN labels. *Neutral grays + 5 colored core modules.*
 
+## Best Practices
+
+1. **Sketch the textual blueprint first.** Before coding, write down the architecture in prose—layers, components, connections, and any special annotations. A crisp text description (like the specs in `evals/*/input.md`) is the single biggest predictor of a quality diagram.
+2. **Let the skill do the heavy lifting.** Feed your text spec to the skill (or `pytest --llm-replay`) and let it generate the initial `gen.py` + SVG. Resist the urge to hand-code coordinates; the evaluator loop catches overlaps, dangles, and crossings automatically.
+3. **Review the score.** If the score is ≥80, you have a structurally sound diagram. If <80, let `auto_refine` or multi-round LLM correction (`--llm-iter`) fix the geometry first.
+4. **Export to PPTX for final polish.** Run `svg_to_pptx()` to get an editable PowerPoint file. That's where you tweak colors, fonts, arrows, and layout to match your brand or publication style—changes that belong in the presentation layer, not the generator code.
+
 ## Install (Claude Code)
 
 This repo is a [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces). Add it and install the plugin:
