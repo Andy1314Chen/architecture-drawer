@@ -2,22 +2,28 @@
 
 English · [简体中文](README.zh_CN.md)
 
-A skill for [Claude Code](https://code.claude.com), Codex, Open Code, Pi Agent, and other AI coding agents: describe your system architecture in plain text, and it generates a **multi-layered technical architecture diagram as SVG**, validates the layout with a 13-dimension quality evaluator, and exports to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
-
-> Draw architecture diagrams with the skill. Export to editable PowerPoint.
+A skill for [Claude Code](https://code.claude.com), Codex, Open Code, Pi Agent, and other AI coding agents: turn a text description of your system architecture into an **editable PowerPoint architecture diagram**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
-## What it does
 
-- **Author diagrams in code** — the agent uses a fluent Python API (`SVGDrawer`) to place rects, circles, shapes, text, and connectors with semantic node/edge registration.
-- **Validate, don't assert** — a 13-check `evaluate_svg` parses the *rendered* SVG (not the API calls) to score collision, boundary, coverage, connection landing, phantom anchors, edge-through-node, crossings, spacing, font tiers, palette, text overflow, composition budget, and text-vs-shape overlaps.
-- **Export to editable PPTX** — `svg_to_pptx` maps each SVG element to a native PowerPoint shape (rect→rectangle, circle→oval, line→connector, path→freeform, text→textbox), with arrow rendering, Bezier flattening, and transparency/dash injection. An image-rasterization fallback mode is included.
-- **Generate → Evaluate → Correct** workflow with `auto_refine` for iterative layout cleanup.
+## What it is
+
+Turn **text descriptions** of an architecture into **editable PPT diagrams**: the agent generates an SVG from your description, auto-validates the layout, then exports to native PowerPoint shapes.
+
+### vs. direct image generation
+
+| | This project | Nano Banana / GPT-Image etc. |
+|---|---|---|
+| Output | **Editable PPT** (every shape draggable, recolorable, retextable) | Flattened image |
+| Control | High (code-generated, precisely adjustable) | Low (prompt-driven, hard to reproduce) |
+| Iteration | Fine-tune directly in PPT | Regenerate from scratch |
+| Cost | Low (pure local computation) | High (per-image billing) |
 
 ## Showcase
+
 
 All diagrams below were generated entirely from text descriptions by the skill, then scored by the 13-dimension evaluator (each scored ≥76/100). They double as the regression suite under `evals/`.
 
@@ -46,7 +52,7 @@ Five horizontal layers (application → orchestration → core capabilities → 
 3. **The skill auto-reviews the score.** If the score is ≥80, the diagram is structurally sound. If <80, the agent can automatically fix layout issues via `auto_refine` or multi-round LLM correction (`--llm-iter`).
 4. **Export to PPTX for final polish.** Run `svg_to_pptx()` to get an editable PowerPoint file. Tweak colors, fonts, arrows, and layout there to match your brand or publication style—these belong in the presentation layer, not the generator code.
 
-The recommended workflow: first have a multi-round discussion with DeepWiki or your agent to produce a text description of the system architecture, then use this skill to quickly generate a PPTX architecture diagram. Finally, fine-tune colors, labels, and other details manually as needed. Compared to direct image generation tools like Nano Banana or GPT-Image, this approach is simpler, more controllable, lower-cost, and allows for further manual refinement.
+Suggested workflow: first discuss with DeepWiki or your agent to produce a clear text description of the system architecture, then use this skill to quickly generate a PPTX diagram, and finally fine-tune colors, labels, and other details directly in PPT.
 
 ## Install (Claude Code)
 
