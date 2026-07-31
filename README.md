@@ -1,10 +1,10 @@
-# svg-architecture-drawer
+# architecture-drawer
 
 A [Claude Code](https://code.claude.com) skill (and standalone Python library) that generates **multi-layered technical architecture diagrams as SVG**, validates their layout with a 13-dimension quality evaluator, and exports them to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
 
 > Draw architecture diagrams in SVG. Export to editable PowerPoint.
 
-[![Tests](https://github.com/conne/svg-architecture-drawer/actions/workflows/test.yml/badge.svg)](https://github.com/conne/svg-architecture-drawer/actions/workflows/test.yml)
+[![Tests](https://github.com/conne/architecture-drawer/actions/workflows/test.yml/badge.svg)](https://github.com/conne/architecture-drawer/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
@@ -21,15 +21,15 @@ A [Claude Code](https://code.claude.com) skill (and standalone Python library) t
 This repo is a [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces). Add it and install the plugin:
 
 ```
-/plugin marketplace add conne/svg-architecture-drawer
-/plugin install svg-architecture-drawer@svg-architecture-drawer
+/plugin marketplace add conne/architecture-drawer
+/plugin install architecture-drawer@architecture-drawer
 ```
 
 Or from the CLI:
 
 ```bash
-claude plugin marketplace add conne/svg-architecture-drawer
-claude plugin install svg-architecture-drawer@svg-architecture-drawer
+claude plugin marketplace add conne/architecture-drawer
+claude plugin install architecture-drawer@architecture-drawer
 ```
 
 Scope with `--scope project` (shared via VCS) or `--scope local` (gitignored). Default is `user`.
@@ -39,16 +39,16 @@ Scope with `--scope project` (shared via VCS) or `--scope local` (gitignored). D
 Each skill is a standalone [Agent Skills spec](https://agentskills.io) directory. Copy it into your platform's skills location (typically `.agents/skills/`):
 
 ```bash
-cp -r plugins/svg-architecture-drawer/skills/svg-architecture-drawer .agents/skills/svg-architecture-drawer
+cp -r plugins/architecture-drawer/skills/architecture-drawer .agents/skills/architecture-drawer
 ```
 
 ## Use as a Python library (no Claude required)
 
-The three modules under `.../skills/svg-architecture-drawer/scripts/` (`svg_utils.py`, `evaluator.py`, `svg2pptx.py`) are plain Python — drop them on `sys.path` and import directly:
+The three modules under `.../skills/architecture-drawer/scripts/` (`svg_utils.py`, `evaluator.py`, `svg2pptx.py`) are plain Python — drop them on `sys.path` and import directly:
 
 ```python
 import sys
-sys.path.insert(0, "path/to/svg-architecture-drawer/plugins/svg-architecture-drawer/skills/svg-architecture-drawer/scripts")
+sys.path.insert(0, "path/to/architecture-drawer/plugins/architecture-drawer/skills/architecture-drawer/scripts")
 
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from evaluator import evaluate_svg
@@ -79,11 +79,11 @@ svg_to_pptx(d.render(), "diagram.pptx")   # editable native shapes
 ## Repository layout
 
 ```
-svg-architecture-drawer/
+architecture-drawer/
 ├── .claude-plugin/marketplace.json              # Claude Code marketplace registry
-├── plugins/svg-architecture-drawer/
+├── plugins/architecture-drawer/
 │   ├── .claude-plugin/plugin.json               # plugin manifest
-│   └── skills/svg-architecture-drawer/
+│   └── skills/architecture-drawer/
 │       ├── SKILL.md                             # agent-consumable workflow (spec-compliant)
 │       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 preset color schemes (S1–S4)
@@ -111,7 +111,7 @@ The suite **locks in current quality** — it catches degradation, it does not r
 
 ## References & acknowledgments
 
-The geometry/connection detection draws on several open-source projects (their reference docs and validators were studied): [ink-graph](https://github.com/qaz1230sp/ink-graph), [fireworks-tech-graph](https://github.com/yizhiyanhua-ai/fireworks-tech-graph), [svg-animations](https://github.com/supermemoryai/skills), [svg-design](https://github.com/tryopendata/skills), and [svg2pptx](https://github.com/benouinirachid/svg2pptx) (the architectural blueprint for the PPTX export module). See the full credits in [`SKILL.md`](plugins/svg-architecture-drawer/skills/svg-architecture-drawer/SKILL.md).
+The geometry/connection detection draws on several open-source projects (their reference docs and validators were studied): [ink-graph](https://github.com/qaz1230sp/ink-graph), [fireworks-tech-graph](https://github.com/yizhiyanhua-ai/fireworks-tech-graph), [svg-animations](https://github.com/supermemoryai/skills), [svg-design](https://github.com/tryopendata/skills), and [svg2pptx](https://github.com/benouinirachid/svg2pptx) (the architectural blueprint for the PPTX export module). See the full credits in [`SKILL.md`](plugins/architecture-drawer/skills/architecture-drawer/SKILL.md).
 
 ## License
 

@@ -13,8 +13,8 @@ spec-compliant skill, and a standalone Python library.
 
 ### Added
 - **Claude Code marketplace packaging** — `.claude-plugin/marketplace.json` and
-  `plugins/svg-architecture-drawer/.claude-plugin/plugin.json`; install via
-  `/plugin marketplace add conne/svg-architecture-drawer`.
+  `plugins/architecture-drawer/.claude-plugin/plugin.json`; install via
+  `/plugin marketplace add conne/architecture-drawer`.
 - **Agent Skills spec compliance** — `SKILL.md` frontmatter (`name` matches the
   directory, bounded `description`), relative file references only.
 - **Regression test suite** (`tests/`) — runs every `evals/` generator as a

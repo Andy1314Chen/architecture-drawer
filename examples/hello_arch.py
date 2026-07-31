@@ -1,4 +1,4 @@
-"""Minimal standalone example for svg-architecture-drawer (no Claude required).
+"""Minimal standalone example for architecture-drawer (no Claude required).
 
 Run:
     python examples/hello_arch.py
@@ -12,8 +12,8 @@ from pathlib import Path
 
 # Resolve the skill scripts dir relative to this example file.
 _HERE = Path(__file__).resolve().parent
-_SKILL = (_HERE / ".." / "plugins" / "svg-architecture-drawer" / "skills"
-          / "svg-architecture-drawer" / "scripts").resolve()
+_SKILL = (_HERE / ".." / "plugins" / "architecture-drawer" / "skills"
+          / "architecture-drawer" / "scripts").resolve()
 sys.path.insert(0, str(_SKILL))
 
 from svg_utils import SVGDrawer, save_svg  # noqa: E402

@@ -1,4 +1,4 @@
-"""Shared fixtures and helpers for the svg-architecture-drawer test suite.
+"""Shared fixtures and helpers for the architecture-drawer test suite.
 
 Each eval case is a self-contained directory under the skill's ``evals/``
 folder containing a ``gen.py`` generator script. Tests treat ``gen.py`` as a
@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-# Skill layout:  tests/  ->  ../plugins/<plugin>/skills/svg-architecture-drawer/
+# Skill layout:  tests/  ->  ../plugins/<plugin>/skills/architecture-drawer/
 ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / "plugins" / "svg-architecture-drawer" / "skills" / "svg-architecture-drawer"
+SKILL = ROOT / "plugins" / "architecture-drawer" / "skills" / "architecture-drawer"
 SCRIPTS = SKILL / "scripts"
 EVALS = SKILL / "evals"
 GOLDEN = ROOT / "tests" / "golden"

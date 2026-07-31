@@ -1,5 +1,5 @@
 ---
-name: svg-architecture-drawer
+name: architecture-drawer
 description: Generates complex, multi-layered technical architecture SVGs from text descriptions. Features intelligent layout constraints, overlap detection, connection/arrow validation, and quality evaluation to ensure professional, polished output.
 ---
 

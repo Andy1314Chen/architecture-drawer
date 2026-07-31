@@ -1,4 +1,4 @@
-"""vLLM architecture diagram generator (svg-architecture-drawer skill).
+"""vLLM architecture diagram generator (architecture-drawer skill).
 
 Layered top-to-bottom pipeline (request -> response) with the signature
 PagedAttention / paged KV-cache abstraction on the right.
