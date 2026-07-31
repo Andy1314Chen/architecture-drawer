@@ -7,6 +7,8 @@ A [Claude Code](https://code.claude.com) skill (and standalone Python library) t
 [![Tests](https://github.com/conne/architecture-drawer/actions/workflows/test.yml/badge.svg)](https://github.com/conne/architecture-drawer/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
+English · [简体中文](README.zh_CN.md)
+
 ---
 
 ## What it does
@@ -34,9 +36,38 @@ claude plugin install architecture-drawer@architecture-drawer
 
 Scope with `--scope project` (shared via VCS) or `--scope local` (gitignored). Default is `user`.
 
-### Other agent platforms (Codex, Gemini CLI, Cursor, Copilot)
+### Codex CLI
+
+> Codex CLI fully supports the [Agent Skills](https://agentskills.io) directory structure.
+
+Copy the skill directory into Codex's skills folder (usually `~/.codex/skills/`):
+
+```bash
+cp -r plugins/architecture-drawer/skills/architecture-drawer ~/.codex/skills/architecture-drawer
+```
+
+Or install project-scoped (recommended):
+
+```bash
+mkdir -p .codex/skills
+cp -r plugins/architecture-drawer/skills/architecture-drawer .codex/skills/
+```
+
+Once installed, ask Codex naturally — the workflow in `SKILL.md` is consumed automatically:
+
+```
+> Draw the architecture of vLLM and export to PPTX
+```
+
+### Other agent platforms (Gemini CLI, Cursor, Copilot)
 
 Each skill is a standalone [Agent Skills spec](https://agentskills.io) directory. Copy it into your platform's skills location (typically `.agents/skills/`):
+
+| Platform | Default skills path |
+|---|---|
+| Gemini CLI | `~/.gemini/skills/` |
+| Cursor (@rules) | `.cursorrules` or `cursor/skills/` |
+| Copilot CLI | Per-platform instructions |
 
 ```bash
 cp -r plugins/architecture-drawer/skills/architecture-drawer .agents/skills/architecture-drawer
