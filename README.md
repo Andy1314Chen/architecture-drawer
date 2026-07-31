@@ -140,6 +140,10 @@ architecture-drawer/
 └── examples/                                    # minimal demo of the generate-evaluate-export loop
 ```
 
+## Community
+
+Thanks to the [LINUX DO](https://linux.do) community. The project gained wider reach, discussion, and real-world feedback after being shared there, and those conversations have helped me keep finding issues and improving architecture-drawer.
+
 ## References & acknowledgments
 
 The geometry/connection detection draws on several open-source projects (their reference docs and validators were studied): [ink-graph](https://github.com/qaz1230sp/ink-graph), [fireworks-tech-graph](https://github.com/yizhiyanhua-ai/fireworks-tech-graph), [svg-animations](https://github.com/supermemoryai/skills), [svg-design](https://github.com/tryopendata/skills), and [svg2pptx](https://github.com/benouinirachid/svg2pptx) (the architectural blueprint for the PPTX export module). See the full credits in [`SKILL.md`](plugins/architecture-drawer/skills/architecture-drawer/SKILL.md).

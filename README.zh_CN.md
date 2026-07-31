@@ -145,6 +145,10 @@ architecture-drawer/
 
 
 
+## 社区
+
+感谢 [LINUX DO](https://linux.do) 社区。项目在社区分享后获得了更多关注、交流和真实反馈，这些讨论帮助我持续发现问题并完善 architecture-drawer。
+
 ## 鸣谢
 
 本项目几何/连接检测部分借鉴了以下开源项目（均深入研究了其参考文档和验证实现）：
