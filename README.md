@@ -140,6 +140,16 @@ pytest --regenerate-golden  # refresh snapshots after an accepted change
 
 The suite **locks in current quality** — it catches degradation, it does not retro-raise the bar on legacy generators written before later-added checks (e.g. text-overlap). Bump a threshold only after intentionally improving that generator.
 
+### LLM replay (opt-in, non-deterministic)
+
+The default suite tests the **engine** (SVGDrawer + evaluator + svg2pptx) against frozen `gen.py` scripts. To also test the skill's core promise — *turn a text description into a compliant diagram* — each eval ships an `input.md` spec. Run the LLM replay gate:
+
+```bash
+pytest --llm-replay   # reads input.md + golden SVG reference, regenerates via LLM, scores only
+```
+
+This replays each eval: feeds the text spec + the golden SVG as a structural reference to an LLM, executes the freshly generated `gen.py`, and asserts the score clears a flat floor (≥80, no per-case golden diff — LLM output is non-deterministic). Requires the `claude` CLI. Run locally or nightly, **not** in the PR gate.
+
 ## References & acknowledgments
 
 The geometry/connection detection draws on several open-source projects (their reference docs and validators were studied): [ink-graph](https://github.com/qaz1230sp/ink-graph), [fireworks-tech-graph](https://github.com/yizhiyanhua-ai/fireworks-tech-graph), [svg-animations](https://github.com/supermemoryai/skills), [svg-design](https://github.com/tryopendata/skills), and [svg2pptx](https://github.com/benouinirachid/svg2pptx) (the architectural blueprint for the PPTX export module). See the full credits in [`SKILL.md`](plugins/architecture-drawer/skills/architecture-drawer/SKILL.md).

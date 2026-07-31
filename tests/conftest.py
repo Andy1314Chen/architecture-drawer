@@ -9,9 +9,12 @@ generator and never re-derives geometry from a bare SVG string.
 """
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -38,6 +41,11 @@ SCORE_THRESHOLDS = {
     "20260730_vllm_arch": 90,
 }
 
+# Minimum acceptable score for LLM-replayed diagrams. One-shot LLM output has
+# more geometric variance than hand-tuned gen.py, so the bar is a flat "no
+# major evaluator violations" rather than matching each frozen baseline.
+LLM_REPLAY_MIN_SCORE = 80
+
 # Generators print the score under several labels ("Quality Score", "SCORE",
 # "Final score", "Initial score", "Score"). Match the last integer following
 # any of them — that is the final reported score for every generator.
@@ -58,10 +66,16 @@ def pytest_addoption(parser):
         "--regenerate-golden", action="store_true", default=False,
         help="Refresh golden SVG snapshots instead of comparing.",
     )
+    parser.addoption(
+        "--llm-replay", action="store_true", default=False,
+        help="Replay evals via LLM: read input.md, regenerate gen.py, "
+             "score only (no golden comparison). Needs the 'claude' CLI.",
+    )
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "regression: eval-case quality + snapshot test")
+    config.addinivalue_line("markers", "llm_replay: LLM-replayed quality (opt-in via --llm-replay)")
 
 @pytest.fixture(scope="session")
 def eval_cases():
@@ -108,7 +122,104 @@ def run_gen(eval_dir: Path):
     return score, svgs[0].read_text(encoding="utf-8")
 
 
+def _extract_code(text: str) -> str:
+    """Pull the largest Python code block out of an LLM response."""
+    for pat in (r"```python\n(.*?)```", r"```\n(.*?)```"):
+        blocks = re.findall(pat, text, re.S)
+        if blocks:
+            return max(blocks, key=len)
+    return text
+
+
+def _build_replay_prompt(skill_md: str, input_md: str, golden_svg: str) -> str:
+    """Assemble the prompt that asks the LLM to produce a gen.py.
+
+    *golden_svg* is the reference rendering — the LLM reproduces a diagram of
+    comparable structure/layout, but is NOT expected to match it byte-for-byte.
+    """
+    return (
+        f"{skill_md}\n\n---\n\n## Task\n\n"
+        "Using the SVGDrawer DSL documented above, write a COMPLETE, "
+        "self-contained Python script that draws the architecture described "
+        "below and evaluates it with evaluate_svg.\n\n"
+        "Requirements:\n"
+        "- Resolve the scripts dir relative to `__file__` via "
+        "`os.path.join(os.path.dirname(os.path.abspath(__file__)), \"..\", \"..\", \"scripts\")`.\n"
+        "- Import from svg_utils, evaluator, and optionally svg2pptx.\n"
+        "- Print the score: `print(f\"Score: {score}\")`.\n"
+        "- Save the SVG next to the script.\n"
+        "- Output ONLY the Python code in a single ```python block.\n\n"
+        "## Architecture to draw\n\n"
+        f"{input_md}\n\n"
+        "## Reference rendering (golden SVG — match the structure, not the "
+        "exact coordinates)\n\n"
+        "```svg\n"
+        f"{golden_svg}\n"
+        "```"
+    )
+
+
+def _llm_generate(prompt: str) -> str:
+    """Call the ``claude`` CLI in headless mode to produce gen.py source.
+
+    Raises ``RuntimeError`` if the CLI is missing or the call fails.
+    """
+    if not shutil.which("claude"):
+        raise RuntimeError(
+            "'claude' CLI not found on PATH. Install Claude Code to run LLM "
+            "replay, or omit --llm-replay for a normal deterministic gate."
+        )
+    proc = subprocess.run(
+        ["claude", "-p", prompt, "--output-format", "text"],
+        capture_output=True, text=True, timeout=600,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"claude CLI failed (exit {proc.returncode}):\n{proc.stderr[-1500:]}"
+        )
+    return _extract_code(proc.stdout)
+
+
+def replay_gen(eval_dir: Path) -> int:
+    """Regenerate a diagram via LLM and return its quality score.
+
+    Reads ``input.md`` from *eval_dir*, asks the LLM to produce a fresh
+    ``gen.py`` using the skill DSL, executes it in a temp directory, and parses
+    the printed score. No golden snapshot comparison — only the score matters.
+
+    Raises ``RuntimeError`` if the LLM backend is unavailable or the generated
+    code fails to run or prints no score.
+    """
+    input_md = (eval_dir / "input.md").read_text(encoding="utf-8")
+    skill_md = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    golden_svg = (GOLDEN / f"{eval_dir.name}.svg").read_text(encoding="utf-8")
+    code = _llm_generate(_build_replay_prompt(skill_md, input_md, golden_svg))
+
+    with tempfile.TemporaryDirectory(prefix="llm_replay_") as tmp:
+        gen_path = Path(tmp) / "gen.py"
+        gen_path.write_text(code, encoding="utf-8")
+        env = os.environ.copy()
+        env["PYTHONPATH"] = (
+            str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
+        )
+        proc = subprocess.run(
+            [sys.executable, str(gen_path)],
+            cwd=tmp, capture_output=True, text=True, timeout=180, env=env,
+        )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"replayed gen.py failed (exit {proc.returncode}):\n"
+            f"{proc.stderr[-2000:]}"
+        )
+    matches = _SCORE_RE.findall(proc.stdout + "\n" + proc.stderr)
+    if not matches:
+        raise RuntimeError(
+            f"replayed gen.py printed no score.\nstdout:\n{proc.stdout[-1500:]}"
+        )
+    return int(matches[-1])
+
+
 __all__ = [
     "ROOT", "SKILL", "SCRIPTS", "EVALS", "GOLDEN",
-    "SCORE_THRESHOLDS", "run_gen",
+    "SCORE_THRESHOLDS", "LLM_REPLAY_MIN_SCORE", "run_gen", "replay_gen",
 ]
