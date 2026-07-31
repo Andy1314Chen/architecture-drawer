@@ -20,7 +20,7 @@ Turn **text descriptions** of an architecture into **editable PPT diagrams**: th
 | Output | **Editable PPT** (every shape draggable, recolorable, retextable) | Flattened image |
 | Control | High (code-generated, precisely adjustable) | Low (prompt-driven, hard to reproduce) |
 | Iteration | Fine-tune directly in PPT | Regenerate from scratch |
-| Cost | Low (pure local computation) | High (per-image billing) |
+| Cost | Low | High (per-image billing) |
 
 ## Showcase
 

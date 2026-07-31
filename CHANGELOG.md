@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] — 2026-07-30
 
 First public release. Extracted from an internal `ppt-agent` workspace and
-restructured as an installable Claude Code plugin marketplace, an Agent Skills
-spec-compliant skill, and a standalone Python library.
+restructured as an installable Claude Code plugin marketplace and an Agent
+Skills spec-compliant skill.
 
 ### Added
 - **Claude Code marketplace packaging** — `.claude-plugin/marketplace.json` and
@@ -20,7 +20,7 @@ spec-compliant skill, and a standalone Python library.
 - **Regression test suite** (`tests/`) — runs every `evals/` generator as a
   subprocess, asserts each printed quality score meets a per-case threshold, and
   diffs the rendered SVG against a golden snapshot (`--regenerate-golden` to
-  refresh). 13 cases, 13 golden SVGs.
+  refresh). 7 cases, 7 golden SVGs.
 - **Skill-spec test** — validates frontmatter, name↔directory, description
   bounds, relative references, core-script presence, and absence of hardcoded
   absolute paths.
@@ -38,12 +38,12 @@ spec-compliant skill, and a standalone Python library.
   cross-project and temporary paths.
 - **Removed `allow_anywhere` parameters** throughout (`svg_to_pptx`,
   `save_pptx`) since the layout gate they bypassed no longer exists.
-- **All 13 generators** (`evals/*/gen.py`) ported to portable `__file__`-relative
+- **All 7 generators** (`evals/*/gen.py`) ported to portable `__file__`-relative
   skill paths and de-score-gated so they always emit their SVG/PNG/PPTX triplet
   (regardless of score), making them usable as deterministic regression cases.
-- The two legacy lower-scoring cases (`mlir_pipeline` 76, `opt_framework` 76)
-  are retained at their current threshold — the suite records existing quality
-  rather than retroactively raising the bar.
+- The legacy lower-scoring case (`mlir_pipeline` 76) is retained at its current
+  threshold — the suite records existing quality rather than retroactively
+  raising the bar.
 
 ### Removed
 - Debug/scratch scripts (`gen_debug.py`, `_diag.py`) — not regression material.

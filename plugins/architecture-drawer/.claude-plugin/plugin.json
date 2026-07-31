@@ -1,6 +1,6 @@
 {
   "name": "architecture-drawer",
-  "description": "Generate complex, multi-layered technical architecture SVGs with layout validation and editable-PPTX export.",
+  "description": "Turn a text description of a system architecture into a multi-layered SVG diagram, validated by a 13-dimension quality evaluator, then exported to editable PowerPoint.",
   "version": "1.0.0",
   "author": {
     "name": "conne",
