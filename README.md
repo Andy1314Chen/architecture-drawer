@@ -145,10 +145,10 @@ The suite **locks in current quality** — it catches degradation, it does not r
 The default suite tests the **engine** (SVGDrawer + evaluator + svg2pptx) against frozen `gen.py` scripts. To also test the skill's core promise — *turn a text description into a compliant diagram* — each eval ships an `input.md` spec. Run the LLM replay gate:
 
 ```bash
-pytest --llm-replay   # reads input.md + golden SVG reference, regenerates via LLM, scores only
+pytest --llm-replay   # reads input.md, regenerates gen.py via LLM, scores only
 ```
 
-This replays each eval: feeds the text spec + the golden SVG as a structural reference to an LLM, executes the freshly generated `gen.py`, and asserts the score clears a flat floor (≥80, no per-case golden diff — LLM output is non-deterministic). Requires the `claude` CLI. Run locally or nightly, **not** in the PR gate.
+This replays each eval: feeds **only** the text spec (`input.md`) + the skill docs (`SKILL.md`) to an LLM, executes the freshly generated `gen.py` in a sandboxed tempdir, and asserts the score clears a flat floor (≥80). The golden SVG is **intentionally not provided** — including the rendered answer turns the replay into reverse-transcription (coordinates get copied verbatim, defects propagate). No per-case golden diff (LLM output is non-deterministic). Requires the `claude` CLI. Run locally or nightly, **not** in the PR gate.
 
 ## References & acknowledgments
 

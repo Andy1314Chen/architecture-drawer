@@ -131,11 +131,15 @@ def _extract_code(text: str) -> str:
     return text
 
 
-def _build_replay_prompt(skill_md: str, input_md: str, golden_svg: str) -> str:
+def _build_replay_prompt(skill_md: str, input_md: str) -> str:
     """Assemble the prompt that asks the LLM to produce a gen.py.
 
-    *golden_svg* is the reference rendering — the LLM reproduces a diagram of
-    comparable structure/layout, but is NOT expected to match it byte-for-byte.
+    IMPORTANT — anti-leakage: the prompt contains ONLY the skill's public
+    documentation (SKILL.md) and the natural-language input spec (input.md).
+    The golden SVG is intentionally NOT included: feeding the rendered output
+    turns the replay into a reverse-transcription exercise (the LLM copies
+    coordinates verbatim, defeats the purpose of testing text->diagram
+    understanding, and propagates any golden defects into the replay).
     """
     return (
         f"{skill_md}\n\n---\n\n## Task\n\n"
@@ -150,12 +154,7 @@ def _build_replay_prompt(skill_md: str, input_md: str, golden_svg: str) -> str:
         "- Save the SVG next to the script.\n"
         "- Output ONLY the Python code in a single ```python block.\n\n"
         "## Architecture to draw\n\n"
-        f"{input_md}\n\n"
-        "## Reference rendering (golden SVG — match the structure, not the "
-        "exact coordinates)\n\n"
-        "```svg\n"
-        f"{golden_svg}\n"
-        "```"
+        f"{input_md}"
     )
 
 
@@ -192,8 +191,12 @@ def replay_gen(eval_dir: Path) -> int:
     """
     input_md = (eval_dir / "input.md").read_text(encoding="utf-8")
     skill_md = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-    golden_svg = (GOLDEN / f"{eval_dir.name}.svg").read_text(encoding="utf-8")
-    code = _llm_generate(_build_replay_prompt(skill_md, input_md, golden_svg))
+    code = _llm_generate(_build_replay_prompt(skill_md, input_md))
+
+    # Sandbox: run the generated code in an empty temp dir with a restricted
+    # PYTHONPATH (only the skill scripts dir). The generated gen.py must not
+    # be able to walk up to the evals directory and read the reference gen.py
+    # or golden SVG — that would leak the answer into the replay.
 
     with tempfile.TemporaryDirectory(prefix="llm_replay_") as tmp:
         gen_path = Path(tmp) / "gen.py"

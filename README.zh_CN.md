@@ -149,10 +149,10 @@ pytest --regenerate-golden  # 接受变更后刷新快照
 默认测试套件验证**引擎层**（SVGDrawer + 评估器 + svg2pptx）对冻结的 `gen.py` 的稳定性。若要同时验证 skill 的核心承诺——*从文本描述生成合规架构图*——每个 eval 附带 `input.md` 文本规格。运行 LLM 回放：
 
 ```bash
-pytest --llm-replay   # 读取 input.md + golden SVG 参考，经 LLM 重新生成，仅比分数
+pytest --llm-replay   # 读取 input.md，经 LLM 重新生成 gen.py，仅比分数
 ```
 
-回放流程：将文本规格 + golden SVG 作为结构参考喂给 LLM，执行新生成的 `gen.py`，断言分数通过统一底线（≥80，不做 per-case golden 比对——LLM 输出非确定性）。需要 `claude` CLI。在本地或夜间运行，**不**进 PR 门禁。
+回放流程：**仅**将文本规格（`input.md`）+ skill 文档（`SKILL.md`）喂给 LLM，在沙箱临时目录执行新生成的 `gen.py`，断言分数通过统一底线（≥80）。golden SVG **刻意不提供**——给出渲染结果会让回放退化为逆向抄写（坐标被逐像素复制，缺陷被传播）。不做 per-case golden 比对（LLM 输出非确定性）。需要 `claude` CLI。在本地或夜间运行，**不**进 PR 门禁。
 
 ## 鸣谢
 

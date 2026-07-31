@@ -123,5 +123,5 @@ Code is synchronous Python. No `async`/`await`, no mypy configuration, no lintin
 - **Framework**: pytest
 - **Test files**: `tests/test_skill_spec.py` (spec compliance), `tests/test_regression.py` (end-to-end regression)
 - **Regression approach**: each eval `gen.py` is run as a black-box subprocess; stdout is parsed for a quality score (regex-matching several label variants), which is asserted against a per-case threshold. The rendered SVG is diffed against a golden snapshot under `tests/golden/`.
-- **LLM replay (opt-in)**: `pytest --llm-replay` reads each eval's `input.md` spec + its golden SVG (structural reference), regenerates `gen.py` via the `claude` CLI, and asserts the score clears a flat floor (`LLM_REPLAY_MIN_SCORE`, ≥80) — no golden diff (LLM output is non-deterministic). Local/nightly only; skipped by default.
+- **LLM replay (opt-in, anti-leakage)**: `pytest --llm-replay` feeds **only** `input.md` (text spec) + `SKILL.md` to the `claude` CLI — the golden SVG is intentionally excluded (feeding the rendered answer turns replay into reverse-transcription). Generated `gen.py` runs in a sandboxed tempdir; only the score must clear `LLM_REPLAY_MIN_SCORE` (≥80). Local/nightly only; skipped by default.
  - **CI**: GitHub Actions on `ubuntu-latest`, Python 3.13, installs `librsvg2-bin`, runs `pytest -v`.
