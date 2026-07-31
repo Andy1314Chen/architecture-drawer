@@ -19,6 +19,20 @@ def _shape_visible(fill, stroke, opacity):
     has_stroke = stroke not in _INVISIBLE_PAINTS
     return has_fill or has_stroke
 
+def _dash_attr(dashed):
+    """Convert a dashed flag/pattern to a stroke-dasharray SVG attribute.
+
+    dashed=False/None -> "" (solid). dashed=True -> the standard "6,3" pattern
+    (same as connect()). dashed="4,3" -> a custom dash pattern. This unifies
+    dashed rendering across rect/circle/line/path/connect so callers never need
+    the raw ``extra='stroke-dasharray="..."'`` spelling.
+    """
+    if dashed is True:
+        return 'stroke-dasharray="6,3"'
+    if isinstance(dashed, str) and dashed:
+        return f'stroke-dasharray="{dashed}"'
+    return ""
+
 
 _NAMED_COLORS = {
     "white": "#ffffff", "black": "#000000", "red": "#ff0000",
@@ -420,7 +434,7 @@ class SVGDrawer:
     # Primitives (rendering + optional semantic registration)
     # ------------------------------------------------------------------
     def rect(self, x, y, w, h, rx=5, ry=5, fill="white", stroke="black",
-             stroke_width=1, opacity=1, id=None, extra="",
+             stroke_width=1, opacity=1, id=None, extra="", dashed=False,
              node_id=None, node_kind="op", bbox=True, role=None):
         """Draw a rectangle.
 
@@ -432,6 +446,7 @@ class SVGDrawer:
               stored on the node; decorative/legend roles skip business checks.
         """
         id_attr = f'id="{id}"' if id else ""
+        extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
         role_attr = f' data-graph-role="{role}"' if role else ""
         self.add_element(
             f'<rect {id_attr} x="{x}" y="{y}" width="{w}" height="{h}" '
@@ -525,12 +540,13 @@ class SVGDrawer:
 
     def circle(self, cx, cy, r, fill="white", stroke="black", stroke_width=1,
                opacity=1, id=None, node_id=None, node_kind="junction", bbox=False,
-               extra="", role=None):
+               extra="", dashed=False, role=None):
         """Draw a circle. When node_id is given, also register a square Node of
         side 2r centered at (cx, cy) so edges can snap to its border (the node
         approximates the circle for connection validation; endpoints landing at
         the center register distance 0)."""
         id_attr = f'id="{id}"' if id else ""
+        extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
         role_attr = f' data-graph-role="{role}"' if role else ""
         self.add_element(
             f'<circle {id_attr} cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" '
@@ -650,9 +666,11 @@ class SVGDrawer:
             self.text(x + w / 2, y + h * 0.5, label, 12, anchor="middle")
 
     def line(self, x1, y1, x2, y2, stroke="black", stroke_width=1, marker_end=None,
-             edge_id=None, register_edge=False, edge_label=None, bbox=False, extra="", role=None):
+             edge_id=None, register_edge=False, edge_label=None, bbox=False, extra="",
+             dashed=False, role=None):
         """Draw a straight line. Register as an Edge when register_edge=True."""
         role_attr = f' data-graph-role="{role}"' if role else ""
+        extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
         marker = f'marker-end="url(#{marker_end})"' if marker_end else ""
         self.add_element(
             f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{stroke}" '
@@ -666,7 +684,7 @@ class SVGDrawer:
 
     def path(self, d, fill="none", stroke="black", stroke_width=1, marker_end=None,
              edge_id=None, register_edge=False, start=None, end=None,
-             edge_label=None, bbox=None, extra="", role=None):
+             edge_label=None, bbox=None, extra="", dashed=False, role=None):
         """Draw an SVG path.
 
         For connection validation pass start/end (the semantic endpoints) plus
@@ -674,6 +692,7 @@ class SVGDrawer:
         what the validator checks against node borders.
         """
         role_attr = f' data-graph-role="{role}"' if role else ""
+        extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
         marker = f'marker-end="url(#{marker_end})"' if marker_end else ""
         self.add_element(
             f'<path d="{d}" fill="{fill}" stroke="{stroke}" '
@@ -706,7 +725,7 @@ class SVGDrawer:
             raise KeyError(f"Unknown target node: {to_id!r}")
         start = self.nodes[from_id].edge_point(from_side)
         end = self.nodes[to_id].edge_point(to_side)
-        extra = 'stroke-dasharray="6,3"' if dashed else ""
+        extra = _dash_attr(dashed)
         # Retract the arrow tip just outside the target border so the marker
         # sits beside the node instead of poking into its interior (the marker
         # refX aligns the tip at the path endpoint). Direction = start->end.

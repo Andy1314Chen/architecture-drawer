@@ -170,7 +170,7 @@ for a, b in [("L1", "L2"), ("L2", "L3"), ("L3", "L4"), ("L4", "L5")]:
 for y, h, _hcn, _hen, _nid in layers:
     cy = y + h / 2
     drawer.line(SX1, cy, BX0, cy, stroke=CARD_STROKE, stroke_width=1.2,
-                register_edge=True, extra='stroke-dasharray="4,3"')
+                register_edge=True, dashed="4,3")
 
 # ---------------------------------------------------------------------------
 # Legend
@@ -195,7 +195,7 @@ drawer.text(i2 + 44, LY0 + 42, "依赖 / 控制流", F_LABEL, fill=INK, anchor="
 # item 3: dashed cross-cut
 i3 = SX0 + 680
 drawer.line(i3, LY0 + 42, i3 + 34, LY0 + 42, stroke=CARD_STROKE, stroke_width=1.2,
-            extra='stroke-dasharray="4,3"')
+            dashed="4,3")
 drawer.text(i3 + 44, LY0 + 42, "安全可观测横跨各层", F_LABEL, fill=INK, anchor="start")
 
 # ---------------------------------------------------------------------------

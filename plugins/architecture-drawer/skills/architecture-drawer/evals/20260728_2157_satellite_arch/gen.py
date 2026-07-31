@@ -201,7 +201,7 @@ for nid, cx, cy, t in ground:
     d.line(cx - 16, cy - 17, cx - 16, cy - 52, stroke=BLUE, stroke_width=1.6,
            marker_end="ah", role="decoration")
     d.line(cx + 16, cy - 52, cx + 16, cy - 17, stroke=BLUE, stroke_width=1.6,
-           marker_end="ah", extra='stroke-dasharray="5,3"', role="decoration")
+           marker_end="ah", dashed="5,3", role="decoration")
 lbl(360, 905 - 62, "指令↑  数据↓")
 
 # ---------------- Relay chain (concrete validated edges) ----------------

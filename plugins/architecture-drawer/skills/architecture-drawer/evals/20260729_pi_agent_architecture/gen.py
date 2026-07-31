@@ -104,7 +104,7 @@ for j, (t, s) in enumerate([("OpenAI","GPT-4o · o3"),("Anthropic","Claude 3.5/4
     clab(LX+gap3+j*(cw3+gap3)+cw3//2, cy3, t, s)
 
 # LLM box
-d.rect(LX, LLMY, LW, LLMH, rx=9, fill=LF, stroke=SK, stroke_width=1.5, extra='stroke-dasharray="6,4"')
+d.rect(LX, LLMY, LW, LLMH, rx=9, fill=LF, stroke=SK, stroke_width=1.5, dashed="6,4")
 d.text(LX+LW//2, LLMY+LLMH//2+1, "LLM API · OpenAI / Anthropic / Google 统一流式调用",
        font_size=F[2], anchor="middle", weight="bold", fill=SK, bbox=BB)
 
@@ -133,7 +133,7 @@ d.text(FR+10, (bts[0]+tps[1])//2+4, "↑ AgentEvent 事件流", font_size=F[3], 
 
 # Tool arrow
 ty = all_pos[2][0]+all_pos[2][1]-16
-d.line(LX+LW+8, ty, LX+LW+104, ty, stroke=TX[1], stroke_width=1.5, marker_end="tl", extra='stroke-dasharray="5,3"')
+d.line(LX+LW+8, ty, LX+LW+104, ty, stroke=TX[1], stroke_width=1.5, marker_end="tl", dashed="5,3")
 mx = LX+LW+56
 d.text(mx, ty-14, "工具执行", font_size=F[3], fill=TX[1], anchor="middle", bbox=BB)
 d.text(mx, ty+17, "Bash · 文件操作", font_size=10, fill="#888", anchor="middle", bbox=BB)

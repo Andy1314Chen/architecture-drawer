@@ -195,7 +195,7 @@ d.rect(40, 916, 560, 40, rx=6, ry=6, fill="white", stroke=DARK,
 d.line(60, 936, 100, 936, stroke=DARK, stroke_width=1.5, role="legend")
 txt(110, 936, "data / request flow", fs=12, anchor="start", bbox=False)
 d.line(300, 936, 340, 936, stroke=DARK, stroke_width=1.5, role="legend",
-       extra='stroke-dasharray="6,3"')
+       dashed="6,3")
 txt(352, 936, "cache / block management", fs=12, anchor="start", bbox=False)
 
 # ---------------------------------------------------------------------------
