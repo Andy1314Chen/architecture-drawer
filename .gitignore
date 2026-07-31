@@ -7,9 +7,11 @@ __pycache__/
 # Generated diagram artifacts (regenerable). The gen.py scripts co-located in
 # evals/<name>/ and examples/<name>/ stay version-controlled; only their
 # SVG/PNG/PPTX outputs are ignored.
+#
+# PPTX: global — no tracked .pptx exists anywhere (golden snapshots are .svg).
+*.pptx
+# SVG/PNG: path-scoped so tests/golden/*.svg baselines stay tracked.
 plugins/**/*.svg
 plugins/**/*.png
-plugins/**/*.pptx
 examples/**/*.svg
 examples/**/*.png
-examples/**/*.pptx
