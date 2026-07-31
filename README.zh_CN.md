@@ -14,7 +14,7 @@
 ## 功能概览
 
 - **代码即蓝图** —— 通过流式 Python API（`SVGDrawer`）放置矩形、圆形、文本和连接器，并自动注册语义节点/边。
-- **先验证，再断言** —— `evaluate_svg` 解析**实际渲染的 SVG**（而非 API 调用本身），对碰撞、边界、覆盖率、连接落点、幽灵锚点、边穿节点、交叉、间距、字体层级、配色、文本溢出、构图预算以及文本-形状重叠等 13 个维度打分。
+- **验证而非断言** —— `evaluate_svg` 解析**实际渲染的 SVG**（而非 API 调用本身），对碰撞、边界、覆盖率、连接落点、幽灵锚点、边穿节点、交叉、间距、字体层级、配色、文本溢出、构图预算以及文本-形状重叠等 13 个维度打分。
 - **导出可编辑 PPTX** —— `svg_to_pptx` 将每个 SVG 元素映射为原生 PowerPoint 形状（矩形→矩形、圆形→椭圆、直线→连接器、路径→自由曲线、文本→文本框），支持箭头渲染、贝塞尔曲线摊平以及透明度/虚线注入。同时提供图片栅格化降级模式。
 - **生成 → 评估 → 修正** 工作流，内置 `auto_refine` 实现迭代式几何清理。
 
@@ -65,7 +65,7 @@ claude plugin marketplace add conne/architecture-drawer
 claude plugin install architecture-drawer@architecture-drawer
 ```
 
-使用 `--scope project`（通过 VCS 共享）或 `--scope local`（gitignored）。默认是 `user`。
+使用 `--scope project`（通过版本控制共享）或 `--scope local`（gitignored）。默认是 `user`。
 
 ### Codex CLI
 
@@ -175,14 +175,14 @@ pytest --regenerate-golden  # 接受变更后刷新快照
 
 ### LLM 回放（可选、非确定性）
 
-默认测试套件验证**引擎层**（SVGDrawer + 评估器 + svg2pptx）对冻结的 `gen.py` 的稳定性。若要同时验证 skill 的核心承诺——*从文本描述生成合规架构图*——每个 eval 附带 `input.md` 文本规格。运行 LLM 回放：
+默认测试套件验证**引擎层**（SVGDrawer + 评估器 + svg2pptx）对冻结的 `gen.py` 的稳定性。若要同时验证 skill 的核心能力——*从文本描述生成合规架构图*——每个 eval 附带 `input.md` 文本规格。运行 LLM 回放：
 
 ```bash
 pytest --llm-replay                 # 多轮：生成 -> 评估 -> 修正
 pytest --llm-replay --llm-iter 5    # 允许更多修正轮次（默认 3）
 ```
 
-回放流程模拟真实 Claude Code 会话：LLM **仅**根据 `input.md` + `SKILL.md`（防泄露——golden SVG 绝不提供）生成初始 `gen.py`，执行后若分数低于目标或有 `[FAIL]` 项，就把评估报告喂回 LLM 让它修坐标/布局（正是 `auto_refine` 做不到的语义决策），循环直到达标或轮次用尽。断言最佳分数通过统一底线（≥80）。需要 `claude` CLI。在本地或夜间运行，**不**进 PR 门禁。
+回放流程模拟真实 Claude Code 会话：LLM **仅**根据 `input.md` + `SKILL.md`（防泄露——golden SVG 绝不提供）生成初始 `gen.py`，执行后若分数低于目标或有 `[FAIL]` 项，就把评估报告反馈给 LLM 让它修坐标/布局（正是 `auto_refine` 做不到的语义决策），循环直到达标或轮次用尽。断言最佳分数通过统一底线（≥80）。需要 `claude` CLI。在本地或夜间运行，**不**进 PR 门禁。
 
 ## 鸣谢
 

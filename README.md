@@ -42,7 +42,7 @@ Five horizontal layers (application → orchestration → core capabilities → 
 
 ## Best Practices
 
-1. **Sketch the textual blueprint first.** Before coding, write down the architecture in prose—layers, components, connections, and any special annotations. A crisp text description (like the specs in `evals/*/input.md`) is the single biggest predictor of a quality diagram.
+1. **Start with a clear text description.** Before coding, write down the architecture in prose—layers, components, connections, and any special annotations. A crisp text spec (like the specs in `evals/*/input.md`) is the single biggest predictor of a quality diagram.
 2. **Let the skill do the heavy lifting.** Feed your text spec to the skill (or `pytest --llm-replay`) and let it generate the initial `gen.py` + SVG. Resist the urge to hand-code coordinates; the evaluator loop catches overlaps, dangles, and crossings automatically.
 3. **Review the score.** If the score is ≥80, you have a structurally sound diagram. If <80, let `auto_refine` or multi-round LLM correction (`--llm-iter`) fix the geometry first.
 4. **Export to PPTX for final polish.** Run `svg_to_pptx()` to get an editable PowerPoint file. That's where you tweak colors, fonts, arrows, and layout to match your brand or publication style—changes that belong in the presentation layer, not the generator code.
@@ -167,7 +167,7 @@ pytest                      # 7 tests, all green
 pytest --regenerate-golden  # refresh snapshots after an accepted change
 ```
 
-The suite **locks in current quality** — it catches degradation, it does not retro-raise the bar on legacy generators written before later-added checks (e.g. text-overlap). Bump a threshold only after intentionally improving that generator.
+The suite **locks in current quality** — it catches degradation, it does not retroactively raise the bar on legacy generators written before later-added checks (e.g. text-overlap). Bump a threshold only after intentionally improving that generator.
 
 ### LLM replay (opt-in, non-deterministic)
 
