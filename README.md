@@ -18,6 +18,28 @@ A [Claude Code](https://code.claude.com) skill (and standalone Python library) t
 - **Export to editable PPTX** — `svg_to_pptx` maps each SVG element to a native PowerPoint shape (rect→rectangle, circle→oval, line→connector, path→freeform, text→textbox), with arrow rendering, Bezier flattening, and transparency/dash injection. An image-rasterization fallback mode is included.
 - **Generate → Evaluate → Correct** workflow with `auto_refine` for iterative geometric cleanup.
 
+## Showcase
+
+All diagrams below were generated entirely from text descriptions by the skill, then scored by the 13-dimension evaluator (each scored ≥76/100). They double as the regression suite under `evals/`.
+
+### vLLM — High-Throughput LLM Serving with PagedAttention
+
+![](docs/showcase/vllm_arch.png)
+
+Six-layer request pipeline (client → API server → engine → paged KV cache → execution → optimizations). Solid edges = data flow; dashed = cache/block management. *Scheme S1 Monochrome Blue.*
+
+### MLIR AI Compiler — Multi-Stream Execution Pipeline
+
+![](docs/showcase/mlir_pipeline.png)
+
+A 4-layer × multi-column matrix (graph optimization → transformation → lowering → codegen) with vertical-fusion grouping and a concurrent multi-stream overlap timeline. *8-accent categorical palette.*
+
+### Agent Infrastructure — Layered Architecture
+
+![](docs/showcase/agent_infra_architecture.png)
+
+Five horizontal layers (application → orchestration → core capabilities → execution → infrastructure) with a cross-cutting security/observability band. Bilingual CN/EN labels. *Neutral grays + 5 colored core modules.*
+
 ## Install (Claude Code)
 
 This repo is a [plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces). Add it and install the plugin:
