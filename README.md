@@ -1,13 +1,13 @@
 # architecture-drawer
 
+English · [简体中文](README.zh_CN.md)
+
 A [Claude Code](https://code.claude.com) skill (and standalone Python library) that generates **multi-layered technical architecture diagrams as SVG**, validates their layout with a 13-dimension quality evaluator, and exports them to **editable PowerPoint** (`pptx`) — every shape becomes a native, resizable PPT element, not a flattened image.
 
 > Draw architecture diagrams in SVG. Export to editable PowerPoint.
 
 [![Tests](https://github.com/conne/architecture-drawer/actions/workflows/test.yml/badge.svg)](https://github.com/conne/architecture-drawer/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-
-English · [简体中文](README.zh_CN.md)
 
 ---
 
