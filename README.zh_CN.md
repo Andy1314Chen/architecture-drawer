@@ -122,7 +122,7 @@ architecture-drawer/
 │       ├── SKILL.md                             # Agent 可读的工作流规范
 │       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 套预设配色方案（S1–S4）
-│       ├── evals/                               # 13 个回归测试用例（每个含 gen.py）
+│       ├── evals/                               # 7 个回归测试用例（每个含 gen.py）
 │       └── assets/
 ├── tests/                                       # pytest：分数阈值 + SVG 快照比对
 │   ├── conftest.py
@@ -134,7 +134,7 @@ architecture-drawer/
 
 ## 回归测试套件
 
-`evals/` 下的 13 张图同时作为回归测试用例。每个 `gen.py` 以子进程运行；其打印的质量评分必须达到该用例的阈值，且渲染后的 SVG 必须与 `tests/golden/` 下的快照匹配。
+`evals/` 下的 7 张图同时作为回归测试用例。每个 `gen.py` 以子进程运行；其打印的质量评分必须达到该用例的阈值，且渲染后的 SVG 必须与 `tests/golden/` 下的快照匹配。
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt

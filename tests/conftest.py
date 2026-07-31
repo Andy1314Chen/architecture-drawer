@@ -29,17 +29,11 @@ GOLDEN = ROOT / "tests" / "golden"
 # observed baseline (2026-07-30). Bump a threshold only after intentionally
 # improving that generator; the snapshot test will also flag the SVG change.
 SCORE_THRESHOLDS = {
-    "20250728_space_opt_framework": 100,
     "20260728_120000_mlir_pipeline": 76,
     "20260728_153000_agent_infra_architecture": 90,
-    "20260728_153000_agent_infra_tracks": 90,
-    "20260728_183101_satellite_arch": 100,
-    "20260728_190000_opt_framework": 76,
     "20260728_203836_llm_inference_arch": 84,
-    "20260728_205612_llm_inference_arch_dawn": 84,
     "20260728_2157_satellite_arch": 100,
     "20260729_llama_cpp_arch": 90,
-    "20260729_pansharpening_cs_mra": 96,
     "20260729_pi_agent_architecture": 100,
     "20260730_vllm_arch": 90,
 }

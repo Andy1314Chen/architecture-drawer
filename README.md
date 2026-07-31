@@ -118,7 +118,7 @@ architecture-drawer/
 │       ├── SKILL.md                             # agent-consumable workflow (spec-compliant)
 │       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 preset color schemes (S1–S4)
-│       ├── evals/                               # 13 regression cases (gen.py each)
+│       ├── evals/                               # 7 regression cases (gen.py each)
 │       └── assets/
 ├── tests/                                       # pytest: score thresholds + SVG golden snapshots
 │   ├── conftest.py
@@ -130,7 +130,7 @@ architecture-drawer/
 
 ## Regression test suite
 
-The 13 diagrams under `evals/` double as a regression suite. Each `gen.py` is run as a subprocess; its printed quality score must meet a per-case threshold, and its rendered SVG must match a golden snapshot under `tests/golden/`.
+The 7 diagrams under `evals/` double as a regression suite. Each `gen.py` is run as a subprocess; its printed quality score must meet a per-case threshold, and its rendered SVG must match a golden snapshot under `tests/golden/`.
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
