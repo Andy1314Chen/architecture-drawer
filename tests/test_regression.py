@@ -87,7 +87,7 @@ def test_llm_replay_quality(eval_cases, request):
     for name, eval_dir in sorted(candidates.items()):
         checked += 1
         try:
-            score = replay_gen(eval_dir)
+            score = replay_gen(eval_dir, request.config.getoption("--llm-iter"))
         except Exception as exc:
             failures.append(f"[{name}] replay error: {exc}")
             continue

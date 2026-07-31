@@ -69,7 +69,11 @@ def pytest_addoption(parser):
     parser.addoption(
         "--llm-replay", action="store_true", default=False,
         help="Replay evals via LLM: read input.md, regenerate gen.py, "
-             "score only (no golden comparison). Needs the 'claude' CLI.",
+             "iterate generate->evaluate->correct, score only. Needs 'claude' CLI.",
+    )
+    parser.addoption(
+        "--llm-iter", action="store", type=int, default=3,
+        help="Max LLM correction rounds (generate + N fix iterations). Default 3.",
     )
 
 
@@ -132,7 +136,7 @@ def _extract_code(text: str) -> str:
 
 
 def _build_replay_prompt(skill_md: str, input_md: str) -> str:
-    """Assemble the prompt that asks the LLM to produce a gen.py.
+    """Assemble the prompt that asks the LLM to produce an initial gen.py.
 
     IMPORTANT — anti-leakage: the prompt contains ONLY the skill's public
     documentation (SKILL.md) and the natural-language input spec (input.md).
@@ -158,6 +162,25 @@ def _build_replay_prompt(skill_md: str, input_md: str) -> str:
     )
 
 
+def _build_refine_prompt(code: str, score: int, report: str) -> str:
+    """Feed the current gen.py + evaluator report back to the LLM for fixing.
+
+    This mirrors the skill's Generate->Evaluate->Correct loop: the LLM sees
+    its own code and the concrete FAIL lines, then must adjust coordinates
+    (auto_refine cannot fix text overlaps / dangles / crossings — those are
+    semantic layout decisions only the LLM can make).
+    """
+    return (
+        "Your generated diagram scored below target. Here is the current "
+        "gen.py and the evaluator report. Fix the [FAIL] and [WARN] items "
+        "(especially text overlaps, dangling edges, crossings) by adjusting "
+        "coordinates/layout — do NOT just add suppressions. Return the FULL "
+        "corrected script in a single ```python block.\n\n"
+        f"## Current code\n\n```python\n{code}\n```\n\n"
+        f"## Score: {score}\n\n## Report\n\n```\n{report}\n```\n"
+    )
+
+
 def _llm_generate(prompt: str) -> str:
     """Call the ``claude`` CLI in headless mode to produce gen.py source.
 
@@ -179,25 +202,12 @@ def _llm_generate(prompt: str) -> str:
     return _extract_code(proc.stdout)
 
 
-def replay_gen(eval_dir: Path) -> int:
-    """Regenerate a diagram via LLM and return its quality score.
+def _run_and_score(code: str) -> tuple[int | None, str, str]:
+    """Execute a gen.py in a sandboxed tempdir and return (score, report, stdout).
 
-    Reads ``input.md`` from *eval_dir*, asks the LLM to produce a fresh
-    ``gen.py`` using the skill DSL, executes it in a temp directory, and parses
-    the printed score. No golden snapshot comparison — only the score matters.
-
-    Raises ``RuntimeError`` if the LLM backend is unavailable or the generated
-    code fails to run or prints no score.
+    score is None when the code fails to run or prints no score; in that case
+    report carries the error/stderr for feedback to the LLM.
     """
-    input_md = (eval_dir / "input.md").read_text(encoding="utf-8")
-    skill_md = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-    code = _llm_generate(_build_replay_prompt(skill_md, input_md))
-
-    # Sandbox: run the generated code in an empty temp dir with a restricted
-    # PYTHONPATH (only the skill scripts dir). The generated gen.py must not
-    # be able to walk up to the evals directory and read the reference gen.py
-    # or golden SVG — that would leak the answer into the replay.
-
     with tempfile.TemporaryDirectory(prefix="llm_replay_") as tmp:
         gen_path = Path(tmp) / "gen.py"
         gen_path.write_text(code, encoding="utf-8")
@@ -209,17 +219,53 @@ def replay_gen(eval_dir: Path) -> int:
             [sys.executable, str(gen_path)],
             cwd=tmp, capture_output=True, text=True, timeout=180, env=env,
         )
+    combined = proc.stdout + "\n" + proc.stderr
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"replayed gen.py failed (exit {proc.returncode}):\n"
-            f"{proc.stderr[-2000:]}"
-        )
-    matches = _SCORE_RE.findall(proc.stdout + "\n" + proc.stderr)
+        return None, combined[-2000:], proc.stdout
+    matches = _SCORE_RE.findall(combined)
     if not matches:
-        raise RuntimeError(
-            f"replayed gen.py printed no score.\nstdout:\n{proc.stdout[-1500:]}"
-        )
-    return int(matches[-1])
+        return None, "no score printed\n" + proc.stdout[-1500:], proc.stdout
+    return int(matches[-1]), combined, proc.stdout
+
+
+def replay_gen(eval_dir: Path, max_iter: int = 3) -> int:
+    """Regenerate a diagram via an LLM generate->evaluate->correct loop.
+
+    Mirrors a real Claude Code session using the skill: generate an initial
+    gen.py from ``input.md``, run it, and if it scores below target or has
+    [FAIL] items, feed the report back to the LLM for a fix (up to *max_iter*
+    correction rounds). Returns the best score achieved.
+
+    Anti-leakage: only ``SKILL.md`` + ``input.md`` enter the prompt; the golden
+    SVG is never provided. The generated code runs sandboxed in a tempdir.
+
+    Raises ``RuntimeError`` if the LLM backend is unavailable.
+    """
+    input_md = (eval_dir / "input.md").read_text(encoding="utf-8")
+    skill_md = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+
+    code = _llm_generate(_build_replay_prompt(skill_md, input_md))
+    best_score, best_code = None, code
+
+    for iteration in range(max_iter + 1):  # 1 generate + max_iter fixes
+        score, report, _ = _run_and_score(code)
+        if score is None:
+            # Runtime/syntax error: let the LLM try to fix it.
+            report_text = report
+        else:
+            if best_score is None or score > best_score:
+                best_score, best_code = score, code
+            # Target met and no FAIL lines -> done.
+            fail_lines = [ln for ln in report.splitlines() if "[FAIL]" in ln]
+            if score >= 100 and not fail_lines:
+                break
+            report_text = report
+        if iteration == max_iter:
+            break
+        # Correction round: feed code + report back to the LLM.
+        code = _llm_generate(_build_refine_prompt(code, score or 0, report_text))
+
+    return best_score if best_score is not None else 0
 
 
 __all__ = [

@@ -145,10 +145,11 @@ The suite **locks in current quality** — it catches degradation, it does not r
 The default suite tests the **engine** (SVGDrawer + evaluator + svg2pptx) against frozen `gen.py` scripts. To also test the skill's core promise — *turn a text description into a compliant diagram* — each eval ships an `input.md` spec. Run the LLM replay gate:
 
 ```bash
-pytest --llm-replay   # reads input.md, regenerates gen.py via LLM, scores only
+pytest --llm-replay                 # multi-round: generate -> evaluate -> correct
+pytest --llm-replay --llm-iter 5    # allow more correction rounds (default 3)
 ```
 
-This replays each eval: feeds **only** the text spec (`input.md`) + the skill docs (`SKILL.md`) to an LLM, executes the freshly generated `gen.py` in a sandboxed tempdir, and asserts the score clears a flat floor (≥80). The golden SVG is **intentionally not provided** — including the rendered answer turns the replay into reverse-transcription (coordinates get copied verbatim, defects propagate). No per-case golden diff (LLM output is non-deterministic). Requires the `claude` CLI. Run locally or nightly, **not** in the PR gate.
+This mirrors a real Claude Code session using the skill: an LLM generates an initial `gen.py` from **only** `input.md` + `SKILL.md` (anti-leakage — the golden SVG is never provided), runs it, and if the score is below target or there are `[FAIL]` items, feeds the evaluator report back to the LLM for a fix (coordinates/layout adjustments — exactly what `auto_refine` cannot do), looping until target or max rounds. Asserts the best score clears a flat floor (≥80). Requires the `claude` CLI. Run locally or nightly, **not** in the PR gate.
 
 ## References & acknowledgments
 
