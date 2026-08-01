@@ -1183,6 +1183,13 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
 def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbose=False):
     """Iteratively evaluate + auto-fix common issues until target or max_iter.
 
+    Fixes are applied via drawer.relocate_node(), which re-emits the node's
+    shape XML and re-routes any connect()-built edges anchored on it — so the
+    fixes actually change the rendered SVG (mutating node.x/y directly does
+    not, since coordinates are baked into emitted strings at draw time). Only
+    rect/circle nodes currently support relocation; other shapes return False
+    and are skipped (reported, not silently ignored).
+
     Auto-fixable categories (programmatic; complex routing left to the caller):
       - text overflow container: cannot auto-fix raw add_element text (no handle);
         reports it instead. Only d.text()-drawn labels with known geometry can wrap.
@@ -1223,18 +1230,18 @@ def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbo
                         ccx, ccy = c[0]+c[2]/2, c[1]+c[3]/2
                         dx = (ccx - ncx) * 0.3
                         dy = (ccy - ncy) * 0.3
-                        node.x += dx; node.y += dy
-                        fixes.append(f"iter{iteration}: nudged '{nid}' by ({dx:.1f},{dy:.1f}) toward container center")
-                        changed = True
+                        if drawer.relocate_node(nid, node.x + dx, node.y + dy):
+                            fixes.append(f"iter{iteration}: nudged '{nid}' by ({dx:.1f},{dy:.1f}) toward container center")
+                            changed = True
             # too close: "spacing ... 'A' and 'B' only Npx apart" -> push B along x
             m = _re.search(r"\[spacing\] '([^']+)' and '([^']+)' only ([\d.]+)px", line)
             if m:
                 a, b, gap = m.group(1), m.group(2), float(m.group(3))
                 if a in drawer.nodes and b in drawer.nodes:
                     nb = drawer.nodes[b]
-                    nb.x += 20  # push right by a gap increment
-                    fixes.append(f"iter{iteration}: pushed '{b}' +20px to clear '{a}'")
-                    changed = True
+                    if drawer.relocate_node(b, nb.x + 20, nb.y):  # push right by a gap increment
+                        fixes.append(f"iter{iteration}: pushed '{b}' +20px to clear '{a}'")
+                        changed = True
         if not changed:
             break
         if verbose:

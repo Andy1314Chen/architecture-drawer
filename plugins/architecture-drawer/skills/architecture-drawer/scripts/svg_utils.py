@@ -225,6 +225,14 @@ class Node:
         # | 'background' | 'reserved'. Decorative/legend/background nodes are
         # excluded from business-logic checks (spacing, palette count, etc.).
         self.role = role
+        # Relocate support: a node drawn outside any group (matrix == identity)
+        # remembers where its emitted XML sits in drawer.elements and how to
+        # regenerate it at new coords, so relocate_node() can move it post-emit.
+        # Mutating x/y directly does NOT update the baked-in emit — this does.
+        self._emit_range = None    # (start, end) indices into drawer.elements
+        self._bbox_index = None    # index into drawer.bboxes (None if bbox=False)
+        self._rebuild_xml = None   # callable(nx, ny) -> list[str]
+        self._rebuild_bbox = None  # callable(nx, ny) -> BBox
 
     @property
     def cx(self):
@@ -274,6 +282,15 @@ class Edge:
         # Semantic role: 'edge' (business) | 'decoration'. Decorative edges
         # (rail casings, echoes) are excluded from crossing/connection checks.
         self.role = role
+        # Relocate support: connect()-built edges remember their node anchors +
+        # emit range so relocate_node() can re-route them when an endpoint node
+        # moves. None for raw line()/path() edges (not auto-rerouted).
+        self.from_id = None
+        self.from_side = None
+        self.to_id = None
+        self.to_side = None
+        self._emit_range = None    # (start, end) indices into drawer.elements
+        self._rebuild_xml = None   # callable() -> list[str] (reads live node coords)
 
     @property
     def length(self):
@@ -419,6 +436,49 @@ class SVGDrawer:
         edge = Edge(start, end, edge_id=edge_id, has_arrow=has_arrow, label=label, path_d=path_d, role=role)
         self.edges.append(edge)
         return edge
+    def _record_rebuild(self, node, start, bbox_idx, had_bbox,
+                        rebuild_xml, rebuild_bbox):
+        """Register post-emit relocation for a node drawn outside any group.
+
+        Only when the current transform is identity (a top-level node): inside
+        a group() coords are local, so absolute-xy relocation is meaningless.
+        """
+        if self._current_matrix != IDENTITY:
+            return
+        node._emit_range = (start, len(self.elements))
+        node._bbox_index = bbox_idx if had_bbox else None
+        node._rebuild_xml = rebuild_xml
+        node._rebuild_bbox = rebuild_bbox
+
+    def relocate_node(self, node_id, new_x, new_y):
+        """Move an already-drawn node to new top-left coords.
+
+        Re-emits the node's shape XML, updates its collision bbox, and
+        re-routes every connect()-built edge anchored on it. Returns True if
+        relocated, False if the node is unknown, was drawn inside a group, or
+        belongs to a shape without rebuild support.
+
+        Unlike mutating node.x/y directly (which the baked-in emit ignores),
+        this updates the actual rendered SVG — use it from auto_refine or any
+        post-emit layout adjustment.
+        """
+        node = self.nodes.get(node_id)
+        if node is None or node._rebuild_xml is None:
+            return False
+        s, e = node._emit_range
+        self.elements[s:e] = node._rebuild_xml(new_x, new_y)
+        if node._bbox_index is not None:
+            self.bboxes[node._bbox_index] = node._rebuild_bbox(new_x, new_y)
+        node.x, node.y = new_x, new_y
+        # Re-route edges anchored on this node (rebuild_xml reads live coords).
+        for edge in self.edges:
+            if edge._rebuild_xml is None:
+                continue
+            if node_id in (edge.from_id, edge.to_id):
+                es, ee = edge._emit_range
+                self.elements[es:ee] = edge._rebuild_xml()
+        return True
+
     def nearest_node(self, px, py, kinds=None):
         """Return (node, distance) for the closest registered node border."""
         best_node, best_dist = None, float("inf")
@@ -433,6 +493,12 @@ class SVGDrawer:
     # ------------------------------------------------------------------
     # Primitives (rendering + optional semantic registration)
     # ------------------------------------------------------------------
+    def _rect_xml(self, x, y, w, h, rx, ry, fill, stroke, stroke_width,
+                  opacity, id_attr, extra, role_attr):
+        return (f'<rect {id_attr} x="{x}" y="{y}" width="{w}" height="{h}" '
+                f'rx="{rx}" ry="{ry}" fill="{fill}" stroke="{stroke}" '
+                f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{role_attr} {extra} />')
+
     def rect(self, x, y, w, h, rx=5, ry=5, fill="white", stroke="black",
              stroke_width=1, opacity=1, id=None, extra="", dashed=False,
              node_id=None, node_kind="op", bbox=True, role=None):
@@ -448,16 +514,22 @@ class SVGDrawer:
         id_attr = f'id="{id}"' if id else ""
         extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
         role_attr = f' data-graph-role="{role}"' if role else ""
+        start, bbox_idx = len(self.elements), len(self.bboxes)
         self.add_element(
-            f'<rect {id_attr} x="{x}" y="{y}" width="{w}" height="{h}" '
-            f'rx="{rx}" ry="{ry}" fill="{fill}" stroke="{stroke}" '
-            f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{role_attr} {extra} />',
+            self._rect_xml(x, y, w, h, rx, ry, fill, stroke, stroke_width,
+                           opacity, id_attr, extra, role_attr),
             BBox(x, y, w, h) if bbox else None,
         )
         self._record_color(fill, stroke)
         if node_id:
             visible = (_shape_visible(fill, stroke, opacity) and w > 0 and h > 0)
-            self.register_node(node_id, x, y, w, h, kind=node_kind, visible=visible, role=role or "node")
+            node = self.register_node(node_id, x, y, w, h, kind=node_kind, visible=visible, role=role or "node")
+            self._record_rebuild(
+                node, start, bbox_idx, bbox,
+                lambda nx, ny: [self._rect_xml(
+                    nx, ny, w, h, rx, ry, fill, stroke, stroke_width,
+                    opacity, id_attr, extra, role_attr)],
+                lambda nx, ny: BBox(nx, ny, w, h))
 
     def text(self, x, y, content, font_size=14, font_family="Arial, sans-serif",
              fill="black", anchor="middle", weight="normal", style="normal",
@@ -538,6 +610,11 @@ class SVGDrawer:
         self.font_sizes.append(font_size)
         self._record_color(fill)
 
+    def _circle_xml(self, cx, cy, r, fill, stroke, stroke_width,
+                    opacity, id_attr, extra, role_attr):
+        return (f'<circle {id_attr} cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" '
+                f'stroke="{stroke}" stroke-width="{stroke_width}" fill-opacity="{opacity}"{role_attr} {extra} />')
+
     def circle(self, cx, cy, r, fill="white", stroke="black", stroke_width=1,
                opacity=1, id=None, node_id=None, node_kind="junction", bbox=False,
                extra="", dashed=False, role=None):
@@ -548,15 +625,22 @@ class SVGDrawer:
         id_attr = f'id="{id}"' if id else ""
         extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
         role_attr = f' data-graph-role="{role}"' if role else ""
+        start, bbox_idx = len(self.elements), len(self.bboxes)
         self.add_element(
-            f'<circle {id_attr} cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" '
-            f'stroke="{stroke}" stroke-width="{stroke_width}" fill-opacity="{opacity}"{role_attr} {extra} />',
+            self._circle_xml(cx, cy, r, fill, stroke, stroke_width,
+                             opacity, id_attr, extra, role_attr),
             BBox(cx - r, cy - r, 2 * r, 2 * r) if bbox else None,
         )
         self._record_color(fill, stroke)
         if node_id:
             visible = (_shape_visible(fill, stroke, opacity) and r > 0)
-            self.register_node(node_id, cx - r, cy - r, 2 * r, 2 * r, kind=node_kind, visible=visible, role=role or "node")
+            node = self.register_node(node_id, cx - r, cy - r, 2 * r, 2 * r, kind=node_kind, visible=visible, role=role or "node")
+            self._record_rebuild(
+                node, start, bbox_idx, bbox,
+                lambda nx, ny: [self._circle_xml(
+                    nx + r, ny + r, r, fill, stroke, stroke_width,
+                    opacity, id_attr, extra, role_attr)],
+                lambda nx, ny: BBox(nx, ny, 2 * r, 2 * r))
 
     def database(self, x, y, w, h, fill="white", stroke="black", stroke_width=1,
                  opacity=1, id=None, node_id=None, node_kind="op", bbox=False,
@@ -708,6 +792,40 @@ class SVGDrawer:
 
     # ------------------------------------------------------------------
     # Connection helpers (snap endpoints to node borders)
+    def _edge_xml(self, start, end, stroke, stroke_width, marker_end,
+                  dashed, as_curve, curve_dir, role):
+        """Generate a connect()-built edge's line/path XML (no side effects).
+
+        Shared by connect() and edge relocate-rebuild so a re-routed edge is
+        byte-identical to a freshly drawn one. Returns (xml, path_d_or_None).
+        """
+        extra = _dash_attr(dashed)
+        role_attr = f' data-graph-role="{role}"' if role else ""
+        marker = f'marker-end="url(#{marker_end})"' if marker_end else ""
+        if marker_end:
+            depth = self.marker_tip_depth(marker_end, stroke_width)
+            dx, dy = end[0] - start[0], end[1] - start[1]
+            seglen = math.hypot(dx, dy) or 1.0
+            ux, uy = dx / seglen, dy / seglen
+            draw_end = (end[0] - ux * depth, end[1] - uy * depth)
+        else:
+            draw_end = end
+        if as_curve:
+            mx = (start[0] + end[0]) / 2.0
+            if curve_dir == "left":
+                mx = min(start[0], end[0]) - 60
+            elif curve_dir == "right":
+                mx = max(start[0], end[0]) + 60
+            d = (f"M{start[0]},{start[1]} C{mx},{start[1]} {mx},{draw_end[1]} "
+                 f"{draw_end[0]},{draw_end[1]}")
+            xml = (f'<path d="{d}" fill="none" stroke="{stroke}" '
+                   f'stroke-width="{stroke_width}" {marker}{role_attr} {extra} />')
+            return xml, d
+        xml = (f'<line x1="{start[0]}" y1="{start[1]}" x2="{draw_end[0]}" '
+               f'y2="{draw_end[1]}" stroke="{stroke}" stroke-width="{stroke_width}" '
+               f'{marker}{role_attr} {extra} />')
+        return xml, None
+
     def connect(self, from_id, from_side, to_id, to_side,
                 stroke="black", stroke_width=1.5, marker_end="arrowhead",
                 edge_id=None, edge_label=None, as_curve=False, curve_dir=None,
@@ -725,34 +843,23 @@ class SVGDrawer:
             raise KeyError(f"Unknown target node: {to_id!r}")
         start = self.nodes[from_id].edge_point(from_side)
         end = self.nodes[to_id].edge_point(to_side)
-        extra = _dash_attr(dashed)
-        # Retract the arrow tip just outside the target border so the marker
-        # sits beside the node instead of poking into its interior (the marker
-        # refX aligns the tip at the path endpoint). Direction = start->end.
-        if marker_end:
-            depth = self.marker_tip_depth(marker_end, stroke_width)
-            dx, dy = end[0] - start[0], end[1] - start[1]
-            seglen = math.hypot(dx, dy) or 1.0
-            ux, uy = dx / seglen, dy / seglen
-            draw_end = (end[0] - ux * depth, end[1] - uy * depth)
-        else:
-            draw_end = end
-        if as_curve:
-            mx = (start[0] + end[0]) / 2.0
-            if curve_dir == "left":
-                mx = min(start[0], end[0]) - 60
-            elif curve_dir == "right":
-                mx = max(start[0], end[0]) + 60
-            d = (f"M{start[0]},{start[1]} C{mx},{start[1]} {mx},{draw_end[1]} "
-                 f"{draw_end[0]},{draw_end[1]}")
-            self.path(d, stroke=stroke, stroke_width=stroke_width, marker_end=marker_end,
-                      edge_id=edge_id, register_edge=True, start=start, end=end,
-                      edge_label=edge_label, extra=extra, role=role)
-        else:
-            self.line(start[0], start[1], draw_end[0], draw_end[1], stroke=stroke,
-                      stroke_width=stroke_width, marker_end=marker_end,
-                      edge_id=edge_id, register_edge=True, edge_label=edge_label,
-                      extra=extra, role=role)
+        estart = len(self.elements)
+        xml, path_d = self._edge_xml(start, end, stroke, stroke_width,
+                                     marker_end, dashed, as_curve, curve_dir, role)
+        self.add_element(xml, None)
+        self._record_color(stroke)
+        edge = self.register_edge(start, end, edge_id=edge_id,
+                                  has_arrow=marker_end is not None,
+                                  label=edge_label, path_d=path_d, role=role or "edge")
+        edge.from_id, edge.from_side = from_id, from_side
+        edge.to_id, edge.to_side = to_id, to_side
+        if self._current_matrix == IDENTITY:
+            edge._emit_range = (estart, len(self.elements))
+            edge._rebuild_xml = lambda: [self._edge_xml(
+                self.nodes[from_id].edge_point(from_side),
+                self.nodes[to_id].edge_point(to_side),
+                stroke, stroke_width, marker_end, dashed, as_curve,
+                curve_dir, role)[0]]
         return start, end
 
     # ------------------------------------------------------------------
