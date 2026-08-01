@@ -87,6 +87,7 @@ For the evaluator to "see" connections, drawing code must register connectable r
 - **Font-size tiers**: use only 3-4 tiers per diagram (title 20 / section header 14 / body 12 / note 10), adjacent tiers ≥1.15× apart (modular type scale). Exceeding this triggers an evaluator warning.
 - **Palette**: pick one of the 4 preset schemes in `references/design_specs.md` by diagram type — S1 Monochrome Blue (default, ≥4 modules), S2 Categorical (classification), S3 Semantic (cloud/system), S4 Duotone (focal highlight). All pre-verified (accent ≤12, no luminance clash). Op cards stay `fill="white"`; color lives in layer fills + borders only. Background defaults to white (`SVGDrawer(bg="#FFFFFF")`); only use `set_background()` for dark themes.
 - **Color & typography**: see `references/design_specs.md`.
+- **Shapes & layout per type**: when the user names a diagram type (architecture / flowchart / ML model / ER / sequence / swimlane / network), apply the matching preset in `references/diagram_types.md` — it maps each semantic role to a primitive (`rect` / `database` / `decision` / `hexagon` / `component` / `cloud`) and gives direction + spacing defaults that pass the evaluator.
 - **Stability**: prefer relative layout logic (i.e. compute new component positions based on known component coordinates).
 - **Entity escaping**: SVG is strict XML — never use HTML entities in text (`&middot;`/`&mdash;` etc. are rejected by the parser). Use Unicode characters (`·` `—`) or `html.escape` instead.
 
