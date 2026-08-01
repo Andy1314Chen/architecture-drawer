@@ -191,9 +191,15 @@ def _llm_generate(prompt: str) -> str:
             "'claude' CLI not found on PATH. Install Claude Code to run LLM "
             "replay, or omit --llm-replay for a normal deterministic gate."
         )
+    # Pass the prompt via stdin, not as a `-p` argument value: a prompt
+    # whose first line starts with `-` (e.g. SKILL.md's `---` YAML
+    # frontmatter) is mis-parsed by the CLI as an unknown option
+    # (`error: unknown option '---...'`). `claude -p` with no argument reads
+    # the prompt from stdin instead, which also sidesteps ARG_MAX on long
+    # prompts.
     proc = subprocess.run(
-        ["claude", "-p", prompt, "--output-format", "text"],
-        capture_output=True, text=True, timeout=600,
+        ["claude", "-p", "--output-format", "text"],
+        input=prompt, capture_output=True, text=True, timeout=1200,
     )
     if proc.returncode != 0:
         raise RuntimeError(
