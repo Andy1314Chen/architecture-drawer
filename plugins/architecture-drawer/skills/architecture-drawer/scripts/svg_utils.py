@@ -855,3 +855,65 @@ def rasterize_svg(svg_path, png_path, width):
         check=True,
     )
     return str(out)
+
+
+# ----------------------------------------------------------------------
+# Layout helpers (pure geometry — compute coords BEFORE drawing)
+# ----------------------------------------------------------------------
+# SVGDrawer bakes coordinates into the emitted string at draw time, so layout
+# must be computed up front and passed to the primitives. Mutating node
+# coords after drawing (the approach auto_refine took) does NOT update the
+# rendered SVG — see the layout-first pattern below.
+
+def _angle_to_side(angle_deg):
+    """Pick (neighbor_side, hub_side) for connect() from a neighbor's angle.
+
+    Angles are SVG-space degrees (0=+x/right, 90=+y/down). Returns the side
+    of the neighbor that faces the hub, and the side of the hub that faces
+    the neighbor, so connect() arrows land cleanly.
+    """
+    a = ((angle_deg + 180) % 360) - 180  # normalize to [-180, 180)
+    if -45 <= a < 45:
+        return "left", "right"     # neighbor is right of hub
+    if 45 <= a < 135:
+        return "top", "bottom"     # neighbor is below hub
+    if a >= 135 or a < -135:
+        return "right", "left"     # neighbor is left of hub
+    return "bottom", "top"         # neighbor is above hub (-135..-45)
+
+
+def layout_radial(hub, neighbors, center, radius, start_angle=-90.0):
+    """Radial (star) layout: hub at center, neighbors evenly on a circle.
+
+    Pure geometry — returns top-left coords + connect() sides; the caller
+    draws. A hub with N neighbors fanned evenly has **zero edge crossings**
+    by construction (every edge is hub<->neighbor). Ideal for message-bus /
+    gateway / load-balancer topologies where one central node talks to many.
+
+    Args:
+        hub: (id, w, h) of the central node.
+        neighbors: list of (id, w, h) for the surrounding nodes.
+        center: (cx, cy) canvas point for the hub's center.
+        radius: distance from hub center to each neighbor's center.
+        start_angle: degrees (0=+x, -90=up) for the first neighbor; others
+            follow at 360/N spacing clockwise.
+    Returns:
+        (positions, sides) where
+          positions = {id: (x, y, w, h)} top-left + size for every node;
+          sides     = {neighbor_id: (neighbor_side, hub_side)} best
+                      connect() sides, picked from each neighbor's angle.
+    """
+    hid, hw, hh = hub
+    cx, cy = center
+    positions = {hid: (cx - hw / 2, cy - hh / 2, hw, hh)}
+    sides = {}
+    n = len(neighbors)
+    step = 360.0 / n if n else 0.0
+    for i, (nid, nw, nh) in enumerate(neighbors):
+        ang = start_angle + i * step
+        theta = math.radians(ang)
+        ncx = cx + radius * math.cos(theta)
+        ncy = cy + radius * math.sin(theta)
+        positions[nid] = (ncx - nw / 2, ncy - nh / 2, nw, nh)
+        sides[nid] = _angle_to_side(ang)
+    return positions, sides
