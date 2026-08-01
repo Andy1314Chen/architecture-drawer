@@ -6,17 +6,19 @@ Color encodes **information**, not decoration. This skill ships multiple preset 
 
 ### How to choose
 
-| Diagram type | Scheme | Rationale |
+Pick by **information need** first — color must earn its place by encoding a class, a type, or a focus. Reach for S1 only when none of those apply, not as a reflex. For a per-diagram-type shortcut, see `references/diagram_types.md`.
+
+| Information need | Scheme | Rationale |
 | :--- | :--- | :--- |
-| Multi-module framework (≥4) / general architecture / **unsure** | **S1 Monochrome Blue** | Single hue, luminance tiers — avoids "too many colors"; grayscale-safe |
-| Categorical / data-flow (2–4 classes needing hue distinction) | S2 Categorical | Colorblind-safe hue separation for distinct classes |
-| Cloud / system topology (component-type semantics) | S3 Semantic | Each component type has a fixed color, consistent across diagrams |
-| Diagram with one focal element (innovation / core module) | S4 Duotone | Cool family + single warm focal accent |
+| Distinguish 2–4 classes / branches / roles / lanes | **S2 Categorical** | Colorblind-safe hue separation — use whenever the eye must group by category |
+| Component **type** has a fixed meaning (cloud / network device) | **S3 Semantic** | One color per type, consistent across every diagram |
+| One focal element (innovation / core / hero module) | **S4 Duotone** | Cool body + single warm accent that pops |
+| Pure layering / pipeline, **no** class or type distinction (or ≥5 same-tier modules) | S1 Monochrome Blue | Single-hue luminance tiers — uniform, grayscale-safe |
 | Grayscale print / technical report | S1 | Pure luminance ramp is inherently gray-safe |
 
-**Default = S1.** When in doubt, a single-hue luminance ramp is always safer than multi-hue.
+**S1 is the fallback, not the default.** Match an information need above first; only fall back to S1 when the diagram is genuinely just layered flow with no categorical / semantic / focal role for color. Defaulting everything to blue wastes the palette and makes every diagram look the same.
 
-### Scheme 1: Monochrome Blue (default)
+### Scheme 1: Monochrome Blue (fallback)
 
 Single hue (Nature Blue), four luminance tiers, **unified dark stroke**. Layers are distinguished by fill lightness (ΔE 8–12, spread 3.6 — uniform), not by hue. Op cards stay white so they don't inflate the accent budget. The most克制/uniform scheme; ideal when modules ≥ 4.
 

@@ -8,15 +8,15 @@ Each preset maps a semantic role to one of the drawer's primitives (`rect` / `ci
 
 | Diagram type | Typical prompt keywords | Palette | Direction |
 | :--- | :--- | :--- | :--- |
-| Architecture (system / cloud / service) | 架构 / architecture / 微服务 / topology | S1 (≥4 modules) or S3 (component-type semantics) | TB; **≥4 tiers → TB**, else LR |
-| Flowchart (process / decision logic) | 流程 / flow / pipeline / 审批 | S2 (2–4 branches) or S1 | TB |
-| ML / DL model | 模型 / network / Transformer / CNN / encoder-decoder | S2 (layer-type hues) or S4 (one focal layer) | TB |
-| ER (database schema) | ER / 表结构 / schema / 数据库设计 | S1 | TB |
-| Sequence (interaction / 时序) | 时序 / sequence / 交互 / 协议流 | S1 | LR (lifelines) × TB (time) |
-| Swimlane (cross-functional / 跨职能) | 泳道 / 谁做什么 / 跨部门 | S2 (per-lane hue) or S1 | LR inside lanes |
-| Network topology | 网络 / topology / LAN / 部署拓扑 | S3 | TB by tier |
+| Architecture (system / cloud / service) | 架构 / architecture / 微服务 / topology | S1 (≥4 same-tier modules) or S3 (component-type semantics) | TB; **≥4 tiers → TB**, else LR |
+| Flowchart (process / decision logic) | 流程 / flow / pipeline / 审批 | **S2** (branches / exception paths need hue) — S1 only if purely linear | TB |
+| ML / DL model | 模型 / network / Transformer / CNN / encoder-decoder | **S2** (layer-type hues) or S4 (one focal layer) | TB |
+| ER (database schema) | ER / 表结构 / schema / 数据库设计 | S1 (or S2 if multiple entity domains) | TB |
+| Sequence (interaction / 时序) | 时序 / sequence / 交互 / 协议流 | S1 (or S2 to color by actor) | LR (lifelines) × TB (time) |
+| Swimlane (cross-functional / 跨职能) | 泳道 / 谁做什么 / 跨部门 | **S2** (one hue per lane) | LR inside lanes |
+| Network topology | 网络 / topology / LAN / 部署拓扑 | **S3** (device-type semantics) | TB by tier |
 
-**Default = Architecture + S1** when the request is ambiguous.
+Palette is picked by **information need**, not habit — see `design_specs.md`. When the request is genuinely ambiguous about type, fall back to Architecture + S1.
 
 ## Universal shape vocabulary (role → primitive)
 
