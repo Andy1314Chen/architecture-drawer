@@ -144,3 +144,115 @@ def test_layout_radial_zero_neighbors():
     pos, sides = layout_radial(("h", 10, 10), [], (50, 50), 30)
     assert pos == {"h": (45.0, 45.0, 10, 10)}
     assert sides == {}
+
+
+# ==========================================================================
+# Round 2: evaluator correctness (claims 1/2/4/5) + svg_utils robustness (3/6)
+# ==========================================================================
+from evaluator import (  # noqa: E402
+    check_composition, _estimate_text_width, _text_bboxes,
+)
+
+
+# ---- claim 1: reorder_barycenter was dead code crashing on Edge.start_id ----
+def test_reorder_barycenter_removed():
+    """The function referenced Edge.start_id/end_id (which don't exist; only
+    from_id/to_id do) and had zero callers. Deleting it is safer than shipping
+    a crash-on-first-use exported helper."""
+    import evaluator
+    assert not hasattr(evaluator, "reorder_barycenter"), (
+        "reorder_barycenter should be deleted (crashed on Edge.start_id, "
+        "zero callers)")
+
+
+# ---- claim 2: curve edges must not report false bends / short segments ----
+def test_curve_edge_no_false_bend_or_short_segment():
+    """A connect(as_curve=True) edge between differently-y endpoints samples
+    into a polyline whose every micro-segment is non-collinear. The old
+    `cross != 0` exact test counted all of them as bends (reported '15 bends
+    (limit 2)'); the tessellation artifacts also tripped shortest-segment.
+    Curves are continuous-curvature by design and must be exempt."""
+    d = SVGDrawer(600, 400)
+    d.rect(50, 50, 80, 40, node_id="a")
+    d.rect(400, 200, 80, 40, node_id="b")
+    d.connect("a", "right", "b", "left", as_curve=True, curve_dir="h")
+    _, warn = check_composition(d)
+    edge_warns = [w for w in warn if "edge" in w
+                  and ("bend" in w or "segment" in w)]
+    assert edge_warns == [], f"curve edge falsely flagged: {edge_warns}"
+
+
+def test_straight_polyline_still_counts_bends():
+    """Bend detection must still fire for genuine orthogonal polyline routing
+    (a path_d of only M/L commands). This guards against over-exemption: only
+    curves (C/S/Q/T/A) are skipped, not all path_d edges."""
+    d = SVGDrawer(800, 400)
+    d.path("M50,50 L200,50 L200,150 L400,150 L400,250 L600,250",
+           edge_id="zig", register_edge=True, start=(50, 50), end=(600, 250))
+    _, warn = check_composition(d)
+    assert any("zig" in w and "bend" in w for w in warn), (
+        "orthogonal 4-bend polyline must be flagged")
+
+
+def test_straight_two_bend_not_flagged():
+    """Two bends is at the limit (max_bends=2) and must NOT warn."""
+    d = SVGDrawer(800, 400)
+    d.path("M50,50 L200,50 L200,150 L600,150",
+           edge_id="L2", register_edge=True, start=(50, 50), end=(600, 150))
+    _, warn = check_composition(d)
+    assert not any("L2" in w and "bend" in w for w in warn)
+
+
+# ---- claim 4: text metric model unified to center (dominant-baseline=central) ----
+def test_text_bbox_uses_center_model():
+    """SVGDrawer emits dominant-baseline='central', so (x,y) is the vertical
+    CENTER of the glyphs. _text_bboxes and check_text_overflow must use the
+    center model (ty +/- fs/2), not the baseline model (ty-0.8fs .. ty+0.2fs)
+    which was off by 0.3fs."""
+    d = SVGDrawer(200, 100)
+    d.rect(40, 30, 120, 40, node_id="box")  # container
+    d.text(100, 50, "hi", font_size=14)      # centered in box
+    svg = d.render()
+    bboxes = _text_bboxes(svg)
+    assert len(bboxes) == 1
+    lx, ty, rx, by = bboxes[0]
+    # center model: top = 50 - 14/2 = 43, bottom = 50 + 14/2 = 57
+    assert ty == pytest.approx(43, abs=0.5)
+    assert by == pytest.approx(57, abs=0.5)
+
+
+# ---- claim 5: HTML entities must not inflate text width ----
+def test_estimate_text_width_unescapes_entities():
+    """svg_utils.text() html.escape()s content before emitting, so the
+    evaluator parses 'a&amp;b' from the rendered SVG. _estimate_text_width
+    must html.unescape it back to 'a&b' (3 glyphs), not count 5 chars."""
+    assert _estimate_text_width("a&amp;b", 14, False) == _estimate_text_width("a&b", 14, False)
+    # sanity: the unescaped width is for 3 glyphs, not 5
+    raw = _estimate_text_width("a&b", 14, False)
+    five = _estimate_text_width("abcde", 14, False)
+    assert raw < five
+
+
+# ---- claim 3: relocate_node guards survive python -O ----
+def test_relocate_node_raises_not_asserts():
+    """The element-count invariant must raise RuntimeError (not assert, which
+    `python -O` strips) so a malformed rebuild can never silently corrupt the
+    element list and shift every downstream _emit_range index."""
+    d = SVGDrawer(200, 100)
+    d.rect(50, 50, 60, 30, node_id="n")
+    # Force a rebuild that emits the wrong number of elements.
+    d.nodes["n"]._emit_range = (0, 1)
+    d.nodes["n"]._rebuild_xml = lambda nx, ny: ["x", "y", "z"]
+    with pytest.raises(RuntimeError, match="node rebuild emitted"):
+        d.relocate_node("n", 100, 100)
+
+
+# ---- claim 6: component bbox must include the left-protruding tabs ----
+def test_component_bbox_includes_tabs():
+    """component() draws two tabs at x='-8' inside a translate group, so they
+    protrude 8px LEFT of the box. The collision bbox must cover them or a
+    left-side neighbor collision is missed."""
+    d = SVGDrawer(300, 200)
+    d.component(100, 80, 80, 50, node_id="c", bbox=True)
+    b = d.bboxes[-1]
+    assert b.x == 92 and b.w == 88, (b.x, b.w)  # x-8, w+8
