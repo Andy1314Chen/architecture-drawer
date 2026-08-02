@@ -2,9 +2,11 @@ import sys
 import os
 import math
 import re as _re
+import html
 
-# Add the scripts directory to path to import BBox
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the scripts directory to path to import BBox. insert(0) so this dir wins
+# over any same-named module elsewhere on sys.path (matches eval-gen convention).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from svg_utils import BBox
 
 
@@ -52,9 +54,12 @@ def _estimate_text_width(content, font_size, bold=False):
 
     Strips SVG/HTML markup (e.g. <tspan ...>..</tspan>) so inline formatting
     tags — standard SVG for subscripts/superscripts — are not counted as
-    visible glyphs (which would massively inflate the estimate).
+    visible glyphs (which would massively inflate the estimate). Also unescapes
+    HTML entities (&amp; -> &) so they count as one glyph, not five: the input
+    is parsed from the *rendered* SVG, where svg_utils.text() has already
+    html.escape()d the content.
     """
-    visible = _re.sub(r'<[^>]+>', '', content)
+    visible = _re.sub(r'<[^>]+>', '', html.unescape(content))
     coef = 0.62 if bold else 0.55
     return sum(font_size * (1.0 if ord(ch) > 0x2E80 else coef) for ch in visible)
 
@@ -104,7 +109,7 @@ def check_text_overflow(drawer, canvas_pad=2, container_pad=6):
         else:
             lx = tx
         rx = lx + w
-        asc, desc = ty - fs * 0.8, ty + fs * 0.2  # baseline at ty
+        asc, desc = ty - fs * 0.5, ty + fs * 0.5  # dominant-baseline="central" -> (x,y) is the vertical center
         snippet = content.strip()[:32]
         # (a) canvas overflow
         if lx < -canvas_pad or rx > W + canvas_pad or asc < -canvas_pad or desc > H + canvas_pad:
@@ -652,54 +657,6 @@ def check_edge_crossings(drawer):
     return issues
 
 
-def reorder_barycenter(nodes, edges, layers, sweeps=6):
-    """Reorder nodes within each layer to minimise edge crossings (barycenter).
-
-    Ported heuristic (DiagramForge Phase 1a / Sugiyama crossing-minimization):
-    each node's barycenter = mean position of its connected neighbours in
-    adjacent layers; sort each layer by barycenter; repeat top-down + bottom-up.
-    Mutates `layers` (list of node-id lists, each sorted by ascending x).
-    `nodes` is {id: Node}; `edges` is the edge list. Returns True if improved.
-
-    Only reorders the *order* within a layer; the caller re-assigns x by the
-    new order (evenly spaced or packed). Crossing count measured before/after.
-    """
-    def count_crosses():
-        pos = {}
-        for li, layer in enumerate(layers):
-            for idx, nid in enumerate(layer):
-                pos[nid] = (li, idx)
-        n = 0
-        ei = [e for e in edges if e.start_id in pos and e.end_id in pos]
-        for a in range(len(ei)):
-            for b in range(a + 1, len(ei)):
-                la, ia = pos[ei[a].start_id], pos[ei[a].end_id]
-                lb, ib = pos[ei[b].start_id], pos[ei[b].end_id]
-                if la[0] == lb[0] and la[1] != lb[1] and ia[0] == ib[0] and ia[1] != ib[1]:
-                    if (la[1] - lb[1]) * (ia[1] - ib[1]) < 0:
-                        n += 1
-        return n
-    before = count_crosses()
-    nbrs = {nid: [] for layer in layers for nid in layer}
-    for e in edges:
-        s, t = getattr(e, 'start_id', None), getattr(e, 'end_id', None)
-        if s in nbrs and t in nbrs:
-            nbrs[s].append(t); nbrs[t].append(s)
-    pos = {}
-    for li, layer in enumerate(layers):
-        for idx, nid in enumerate(layer):
-            pos[nid] = (li, idx)
-    def bary(nid, adj_layer):
-        ns = [pos[m][1] for m in nbrs[nid] if pos.get(m, (None,))[0] == adj_layer]
-        return sum(ns) / len(ns) if ns else pos[nid][1]
-    for sweep in range(sweeps):
-        order = range(len(layers)) if sweep % 2 == 0 else range(len(layers) - 1, -1, -1)
-        for li in order:
-            layers[li].sort(key=lambda nid: bary(nid, li - 1 if sweep % 2 == 0 else li + 1))
-            for idx, nid in enumerate(layers[li]):
-                pos[nid] = (li, idx)
-    after = count_crosses()
-    return after < before
 
 
 def _text_bboxes(svg):
@@ -729,7 +686,7 @@ def _text_bboxes(svg):
             lx = tx - w
         else:
             lx = tx
-        out.append((lx, ty - fs * 0.8, lx + w, ty + fs * 0.2))
+        out.append((lx, ty - fs * 0.5, lx + w, ty + fs * 0.5))
     return out
 
 
@@ -760,26 +717,43 @@ def check_composition(drawer, max_bends=2, max_route_stretch=1.35,
     edges = [e for e in drawer.edges if getattr(e, "role", "edge") == "edge"]
     for edge in edges:
         poly = edge_polyline(edge)
-        # bend count = direction changes in the polyline (>2pt samples only)
-        bends = 0
-        for i in range(1, len(poly) - 1):
-            dx1, dy1 = poly[i][0] - poly[i-1][0], poly[i][1] - poly[i-1][1]
-            dx2, dy2 = poly[i+1][0] - poly[i][0], poly[i+1][1] - poly[i][1]
-            if abs(dx1) > 0.5 or abs(dy1) > 0.5:  # skip degenerate samples
-                if (dx1 * dy2 - dy1 * dx2) != 0:  # non-collinear = a bend
-                    bends += 1
+        eid = edge.id or "edge"
         length = sum(math.hypot(poly[k+1][0]-poly[k][0], poly[k+1][1]-poly[k][1])
                      for k in range(len(poly)-1))
         direct = math.hypot(poly[-1][0]-poly[0][0], poly[-1][1]-poly[0][1])
         stretch = length / direct if direct > 1e-9 else 1.0
+        if stretch > max_route_stretch + 1e-6:
+            warn.append(f"[composition] edge '{eid}' stretch {stretch:.2f} > {max_route_stretch}.")
+        # Curves (path_d with a curve command C/S/Q/T/A) are continuous-curvature
+        # by design — sampling one into a polyline yields many tiny non-collinear
+        # segments that are NOT orthogonal bends, and the micro-segments are
+        # tessellation artifacts, not layout bugs. So bend/shortest-segment checks
+        # apply to straight-line edges (raw line() or M/L/H/V-only paths) only.
+        # A curve that loops too far is still caught by the stretch check above.
+        # (A polyline path_d with only M/L/H/V/Z is straight-line routing and
+        # MUST still be checked — it has genuine orthogonal bends.)
+        pd = getattr(edge, "path_d", None)
+        is_curve = bool(pd) and bool(_re.search(r"[cCqQtTaAsS]", pd))
+        if is_curve:
+            continue
+        # Straight edge: count discrete turns. A real bend is a direction change
+        # above an angle threshold (>15 deg), robust to sub-pixel jitter that
+        # made the old exact `cross != 0` test fire on every sample.
+        bends = 0
+        BEND_ANGLE = math.radians(15)
+        for i in range(1, len(poly) - 1):
+            dx1, dy1 = poly[i][0] - poly[i-1][0], poly[i][1] - poly[i-1][1]
+            dx2, dy2 = poly[i+1][0] - poly[i][0], poly[i+1][1] - poly[i][1]
+            if (abs(dx1) > 0.5 or abs(dy1) > 0.5) and (abs(dx2) > 0.5 or abs(dy2) > 0.5):
+                cross = dx1 * dy2 - dy1 * dx2
+                dot = dx1 * dx2 + dy1 * dy2
+                if abs(math.atan2(abs(cross), dot)) > BEND_ANGLE:
+                    bends += 1
+        if bends > max_bends:
+            warn.append(f"[composition] edge '{eid}' has {bends} bends (limit {max_bends}).")
         segs = [math.hypot(poly[k+1][0]-poly[k][0], poly[k+1][1]-poly[k][1])
                 for k in range(len(poly)-1)]
         shortest = min(segs) if segs else None
-        eid = edge.id or "edge"
-        if bends > max_bends:
-            warn.append(f"[composition] edge '{eid}' has {bends} bends (limit {max_bends}).")
-        if stretch > max_route_stretch + 1e-6:
-            warn.append(f"[composition] edge '{eid}' stretch {stretch:.2f} > {max_route_stretch}.")
         if shortest is not None and shortest < min_segment:
             warn.append(f"[composition] edge '{eid}' shortest segment {shortest:.1f}px < {min_segment}.")
 
@@ -1155,7 +1129,7 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
         report.append(f"[{tag}] Typography: {len(font_issues)} issue(s). Penalty: -{penalty}")
         for line in font_issues:
             report.append(f"        - {line}")
-    elif _extract_font_sizes(drawer.render()):
+    else:
         uniq = sorted(set(_extract_font_sizes(drawer.render())))
         report.append(f"[PASS] Type scale: {len(uniq)} size(s) {uniq} (<=4, well-separated).")
 
