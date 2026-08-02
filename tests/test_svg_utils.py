@@ -256,3 +256,94 @@ def test_component_bbox_includes_tabs():
     d.component(100, 80, 80, 50, node_id="c", bbox=True)
     b = d.bboxes[-1]
     assert b.x == 92 and b.w == 88, (b.x, b.w)  # x-8, w+8
+
+
+# ==========================================================================
+# Round 3: minor/nit fixes + coverage gaps (cascade, circle, edge invariant)
+# ==========================================================================
+
+
+# ---- F2: literal angle brackets survive width estimation ----
+def test_literal_angle_brackets_not_swallowed():
+    """Order must be strip-tags THEN unescape. A user's literal 'a <b> c' is
+    emitted as 'a &lt;b&gt; c'; unescaping first would resurrect a real <b>
+    tag that the strip regex then swallows, undercounting width by 3 glyphs."""
+    w = _estimate_text_width("a &lt;b&gt; c", 14, False)
+    # 7 glyphs (a, space, <, b, >, space, c) at 0.55*14 each
+    assert w == pytest.approx(7 * 14 * 0.55, rel=0.01)
+
+
+# ---- F1: relocate refuses when a group-anchored edge can't follow ----
+def test_relocate_refuses_group_anchored_edge():
+    """A top-level node connected to a group-drawn node has an edge whose
+    _rebuild_xml is None. Relocating must refuse (return False) atomically
+    rather than move the node and leave the edge stale (a dangling edge)."""
+    d = SVGDrawer(600, 400)
+    d.rect(0, 0, 60, 30, node_id="top")
+    with d.group("translate(100,50)"):
+        d.rect(0, 0, 60, 30, node_id="ing")
+        d.connect("top", "right", "ing", "left")
+    old_start = d.edges[0].start
+    assert d.relocate_node("top", 300, 100) is False
+    # nothing moved
+    assert d.edges[0].start == old_start
+    assert d.nodes["top"].x == 0
+
+
+# ---- F5: layout_radial rejects duplicate ids ----
+def test_layout_radial_rejects_hub_id_collision():
+    with pytest.raises(ValueError, match="duplicate node id"):
+        layout_radial(("h", 10, 10), [("h", 20, 20), ("n", 20, 20)], (50, 50), 30)
+
+
+def test_layout_radial_rejects_neighbor_dup():
+    with pytest.raises(ValueError, match="duplicate node id"):
+        layout_radial(("h", 10, 10), [("n", 20, 20), ("n", 20, 20)], (50, 50), 30)
+
+
+# ---- coverage gap: cascade relocate (both endpoints move) ----
+def test_relocate_cascade_both_endpoints():
+    """Relocating node A re-routes edge A->B; relocating B after must see A's
+    NEW position as the edge start (cascade), not A's original."""
+    d = SVGDrawer(600, 400)
+    d.rect(100, 100, 60, 30, node_id="a")
+    d.rect(300, 100, 60, 30, node_id="b")
+    d.connect("a", "right", "b", "left")
+    edge = d.edges[0]
+    d.relocate_node("a", 120, 100)   # move A
+    after_a = edge.start
+    d.relocate_node("b", 340, 100)   # move B; edge.start must stay at A's new pos
+    assert edge.start == after_a      # A's move persisted
+    assert edge.end == (340.0, 115.0)  # B's new left midpoint
+
+
+# ---- coverage gap: circle node relocate recomputes center ----
+def test_relocate_circle_node_center():
+    """circle()'s rebuild lambda maps top-left back to center (cx=nx+r).
+    After relocate, node.cx/cy and the re-emitted <circle cx,cy> must agree."""
+    d = SVGDrawer(400, 300)
+    d.circle(200, 150, 12, node_id="junc", node_kind="junction", bbox=True)
+    assert d.relocate_node("junc", 250, 200) is True
+    node = d.nodes["junc"]
+    # top-left (250,200) + r=12 -> center (262, 212)
+    assert node.cx == 262 and node.cy == 212
+    svg = d.render()
+    assert 'cx="262"' in svg and 'cy="212"' in svg
+
+
+# ---- coverage gap: edge rebuild length invariant ----
+def test_edge_rebuild_emits_one_element():
+    """The relocate edge-rebuild replaces elements[es:ee] and asserts the new
+    list length matches the slot. A connect() edge occupies exactly 1 element;
+    the rebuild lambda must return a 1-element list or relocate raises."""
+    d = SVGDrawer(400, 300)
+    d.rect(50, 50, 60, 30, node_id="a")
+    d.rect(250, 50, 60, 30, node_id="b")
+    d.connect("a", "right", "b", "left")
+    edge = d.edges[0]
+    es, ee = edge._emit_range
+    assert ee - es == 1  # original slot is 1 element
+    new_xmls, _ = edge._rebuild_xml()
+    assert len(new_xmls) == 1  # rebuild returns exactly 1
+    # relocating must succeed (no RuntimeError on the edge invariant)
+    assert d.relocate_node("b", 300, 50) is True
