@@ -454,9 +454,13 @@ class SVGDrawer:
         """Move an already-drawn node to new top-left coords.
 
         Re-emits the node's shape XML, updates its collision bbox, and
-        re-routes every connect()-built edge anchored on it. Returns True if
-        relocated, False if the node is unknown, was drawn inside a group, or
-        belongs to a shape without rebuild support.
+        re-routes every connect()-built edge anchored on it. Critically, it
+        also refreshes each re-routed edge's registry fields (start/end/
+        path_d): the evaluator's connection/crossing/routing checks read
+        `drawer.edges[*]`, NOT the re-parsed SVG, so a re-emit that left the
+        registry stale would report phantom dangles and undermine the fix.
+        Returns True if relocated, False if the node is unknown, was drawn
+        inside a group, or belongs to a shape without rebuild support.
 
         Unlike mutating node.x/y directly (which the baked-in emit ignores),
         this updates the actual rendered SVG — use it from auto_refine or any
@@ -466,17 +470,30 @@ class SVGDrawer:
         if node is None or node._rebuild_xml is None:
             return False
         s, e = node._emit_range
-        self.elements[s:e] = node._rebuild_xml(new_x, new_y)
+        new_elems = node._rebuild_xml(new_x, new_y)
+        # A rebuild MUST emit exactly as many elements as it replaces, or every
+        # later _emit_range index (other nodes', edges') silently shifts and
+        # corrupts the element list.
+        assert len(new_elems) == e - s, (
+            f"relocate_node('{node_id}'): node rebuild emitted "
+            f"{len(new_elems)} elements, expected {e - s}")
+        self.elements[s:e] = new_elems
         if node._bbox_index is not None:
             self.bboxes[node._bbox_index] = node._rebuild_bbox(new_x, new_y)
         node.x, node.y = new_x, new_y
-        # Re-route edges anchored on this node (rebuild_xml reads live coords).
+        # Re-route edges anchored on this node: re-emit their XML AND refresh
+        # the registry so evaluate_svg's connection checks see the new coords.
         for edge in self.edges:
             if edge._rebuild_xml is None:
                 continue
             if node_id in (edge.from_id, edge.to_id):
                 es, ee = edge._emit_range
-                self.elements[es:ee] = edge._rebuild_xml()
+                new_xmls, (nstart, nend, npath_d) = edge._rebuild_xml()
+                assert len(new_xmls) == ee - es, (
+                    f"relocate_node('{node_id}'): edge '{edge.id}' rebuild "
+                    f"emitted {len(new_xmls)} elements, expected {ee - es}")
+                self.elements[es:ee] = new_xmls
+                edge.start, edge.end, edge.path_d = nstart, nend, npath_d
         return True
 
     def nearest_node(self, px, py, kinds=None):
@@ -855,11 +872,18 @@ class SVGDrawer:
         edge.to_id, edge.to_side = to_id, to_side
         if self._current_matrix == IDENTITY:
             edge._emit_range = (estart, len(self.elements))
-            edge._rebuild_xml = lambda: [self._edge_xml(
-                self.nodes[from_id].edge_point(from_side),
-                self.nodes[to_id].edge_point(to_side),
-                stroke, stroke_width, marker_end, dashed, as_curve,
-                curve_dir, role)[0]]
+            def _edge_rebuild():
+                # Recompute endpoints from the nodes' live border midpoints so
+                # a re-route after relocate_node() lands on the moved border.
+                # Returns (xml_list, (start, end, path_d)) so the caller can
+                # refresh both the rendered SVG and the Edge registry.
+                rs = self.nodes[from_id].edge_point(from_side)
+                re_ = self.nodes[to_id].edge_point(to_side)
+                rxml, rpath_d = self._edge_xml(
+                    rs, re_, stroke, stroke_width, marker_end, dashed,
+                    as_curve, curve_dir, role)
+                return [rxml], (rs, re_, rpath_d)
+            edge._rebuild_xml = _edge_rebuild
         return start, end
 
     # ------------------------------------------------------------------

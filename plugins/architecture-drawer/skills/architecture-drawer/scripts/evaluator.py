@@ -1233,6 +1233,8 @@ def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbo
                         if drawer.relocate_node(nid, node.x + dx, node.y + dy):
                             fixes.append(f"iter{iteration}: nudged '{nid}' by ({dx:.1f},{dy:.1f}) toward container center")
                             changed = True
+                        else:
+                            fixes.append(f"iter{iteration}: SKIP gutter fix for '{nid}' — non-relocatable shape (drawn in a group, or database/decision/hexagon/component/cloud)")
             # too close: "spacing ... 'A' and 'B' only Npx apart" -> push B along x
             m = _re.search(r"\[spacing\] '([^']+)' and '([^']+)' only ([\d.]+)px", line)
             if m:
@@ -1242,6 +1244,8 @@ def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbo
                     if drawer.relocate_node(b, nb.x + 20, nb.y):  # push right by a gap increment
                         fixes.append(f"iter{iteration}: pushed '{b}' +20px to clear '{a}'")
                         changed = True
+                    else:
+                        fixes.append(f"iter{iteration}: SKIP spacing fix for '{b}' — non-relocatable shape (drawn in a group, or database/decision/hexagon/component/cloud)")
         if not changed:
             break
         if verbose:
