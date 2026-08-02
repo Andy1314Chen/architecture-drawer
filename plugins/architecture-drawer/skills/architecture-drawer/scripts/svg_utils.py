@@ -459,8 +459,14 @@ class SVGDrawer:
         path_d): the evaluator's connection/crossing/routing checks read
         `drawer.edges[*]`, NOT the re-parsed SVG, so a re-emit that left the
         registry stale would report phantom dangles and undermine the fix.
+
         Returns True if relocated, False if the node is unknown, was drawn
-        inside a group, or belongs to a shape without rebuild support.
+        inside a group, belongs to a shape without rebuild support, OR has a
+        connect()-built edge that cannot be re-routed (e.g. the edge was
+        drawn inside a group, so its `_rebuild_xml` is None). The check is
+        atomic: if ANY anchored edge can't follow the node, the whole move is
+        refused rather than leaving the node moved and its edges stale (a
+        half-applied relocate would dangle).
 
         Unlike mutating node.x/y directly (which the baked-in emit ignores),
         this updates the actual rendered SVG — use it from auto_refine or any
@@ -469,6 +475,10 @@ class SVGDrawer:
         node = self.nodes.get(node_id)
         if node is None or node._rebuild_xml is None:
             return False
+        # Atomicity guard: refuse if any edge anchored here can't be re-routed.
+        for edge in self.edges:
+            if node_id in (edge.from_id, edge.to_id) and edge._rebuild_xml is None:
+                return False
         s, e = node._emit_range
         new_elems = node._rebuild_xml(new_x, new_y)
         # A rebuild MUST emit exactly as many elements as it replaces, or every
@@ -859,6 +869,11 @@ class SVGDrawer:
         line/arrow always lands exactly on a node edge. The connection is
         registered for validation automatically. Pass dashed=True for a
         stroke-dasharray style (e.g. lowering/bypass flows).
+
+        Returns ``(start, end)`` — the two border-midpoint coords the edge was
+        drawn between (useful for placing edge labels or chaining geometry).
+        Edges drawn outside any group() are re-routable by relocate_node();
+        edges drawn inside a group are not (their coords are local).
         """
         if from_id not in self.nodes:
             raise KeyError(f"Unknown source node: {from_id!r}")
@@ -1042,6 +1057,17 @@ def layout_radial(hub, neighbors, center, radius, start_angle=-90.0):
     """
     hid, hw, hh = hub
     cx, cy = center
+    # Reject duplicate ids up front: a neighbor sharing the hub id (or another
+    # neighbor's id) would silently overwrite positions[hid] / a prior neighbor,
+    # yielding a wrong layout with no diagnostic.
+    nids = [nid for nid, _w, _h in neighbors]
+    dupes = {hid, }  # hub id is reserved
+    for nid in nids:
+        if nid in dupes:
+            raise ValueError(
+                f"layout_radial: duplicate node id {nid!r} (a neighbor cannot "
+                f"share the hub id or another neighbor's id)")
+        dupes.add(nid)
     positions = {hid: (cx - hw / 2, cy - hh / 2, hw, hh)}
     sides = {}
     n = len(neighbors)

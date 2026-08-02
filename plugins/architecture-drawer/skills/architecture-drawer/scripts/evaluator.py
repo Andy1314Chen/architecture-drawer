@@ -54,12 +54,13 @@ def _estimate_text_width(content, font_size, bold=False):
 
     Strips SVG/HTML markup (e.g. <tspan ...>..</tspan>) so inline formatting
     tags — standard SVG for subscripts/superscripts — are not counted as
-    visible glyphs (which would massively inflate the estimate). Also unescapes
-    HTML entities (&amp; -> &) so they count as one glyph, not five: the input
-    is parsed from the *rendered* SVG, where svg_utils.text() has already
-    html.escape()d the content.
+    visible glyphs (which would massively inflate the estimate). Stripping
+    happens BEFORE unescaping entities (&amp; -> &): the reverse order would
+    turn a user's literal '<b>' (emitted as '&lt;b&gt;') back into a real tag
+    and swallow it, undercounting the width. The input is parsed from the
+    *rendered* SVG, where svg_utils.text() has already html.escape()d content.
     """
-    visible = _re.sub(r'<[^>]+>', '', html.unescape(content))
+    visible = html.unescape(_re.sub(r'<[^>]+>', '', content))
     coef = 0.62 if bold else 0.55
     return sum(font_size * (1.0 if ord(ch) > 0x2E80 else coef) for ch in visible)
 
@@ -1131,7 +1132,10 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
             report.append(f"        - {line}")
     else:
         uniq = sorted(set(_extract_font_sizes(drawer.render())))
-        report.append(f"[PASS] Type scale: {len(uniq)} size(s) {uniq} (<=4, well-separated).")
+        if uniq:
+            report.append(f"[PASS] Type scale: {len(uniq)} size(s) {uniq} (<=4, well-separated).")
+        else:
+            report.append("[INFO] Type scale: no text in this diagram; check skipped.")
 
     # 8. Color palette check
     palette_issues = check_palette(drawer)
