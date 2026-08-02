@@ -9,8 +9,8 @@ Each preset maps a semantic role to one of the drawer's primitives (`rect` / `ci
 | Diagram type | Typical prompt keywords | Palette | Direction |
 | :--- | :--- | :--- | :--- |
 | Architecture (system / cloud / service) | 架构 / architecture / 微服务 / topology | S1 (≥4 same-tier modules) or S3 (component-type semantics) | TB; **≥4 tiers → TB**, else LR |
-| Flowchart (process / decision logic) | 流程 / flow / pipeline / 审批 | **S2** (branches / exception paths need hue) — S1 only if purely linear | TB |
-| ML / DL model | 模型 / network / Transformer / CNN / encoder-decoder | **S2** (layer-type hues) or S4 (one focal layer) | TB |
+| Flowchart (process / decision logic) | 流程 / flow / pipeline / 审批 | **Role palette** (process/decision/IO hues below) — S1 only if purely linear | TB |
+| ML / DL model | 模型 / network / Transformer / CNN / encoder-decoder | **Role palette** by layer type (below), or S4 for one focal layer | TB |
 | ER (database schema) | ER / 表结构 / schema / 数据库设计 | S1 (or S2 if multiple entity domains) | TB |
 | Sequence (interaction / 时序) | 时序 / sequence / 交互 / 协议流 | S1 (or S2 to color by actor) | LR (lifelines) × TB (time) |
 | Swimlane (cross-functional / 跨职能) | 泳道 / 谁做什么 / 跨部门 | **S2** (one hue per lane) | LR inside lanes |
@@ -20,7 +20,7 @@ Palette is picked by **information need**, not habit — see `design_specs.md`. 
 
 ## Universal shape vocabulary (role → primitive)
 
-Use this as the canonical mapping. A node drawn with `node_id=` is connectable; `role="layer"|"background"` marks a container that the evaluator excludes from spacing/palette checks.
+Use this as the canonical mapping. A node drawn with `node_id=` is connectable; `role="layer"|"background"` marks a container that the evaluator **excludes from spacing/collision checks**. Palette checks are role-agnostic — they ignore only *neutral* fills/strokes (near-white / gray), so keep container fills near-white (`#F7F7F7`) if you don't want them counted toward the accent budget.
 
 | Role | Primitive | Notes |
 | :--- | :--- | :--- |
@@ -29,7 +29,7 @@ Use this as the canonical mapping. A node drawn with `node_id=` is connectable; 
 | Database / persistent store | `database(node_id=…, fill=S-tier)` | Cylinder |
 | Decision / branch | `decision(node_id=…, fill=S-tier)` | Diamond |
 | Gateway / broker / bus (hub) | `hexagon(node_id=…, fill=S-tier)` | 6-sided; place centrally |
-| External system / 3rd-party | `component(node_id=…, fill=S-tier, dashed=True)` | Tabbed box; dashed = outside boundary |
+| External system / 3rd-party | `component(node_id=…, fill=S-tier, extra='stroke-dasharray="6,3"')` | Tabbed box; dashed border = outside boundary |
 | Internet / WAN / cloud service | `cloud(node_id=…, fill=S-tier)` | Multi-lobe cloud |
 | Start / End terminator | `circle(node_id=…, r=…)` or `rect(rx=h/2)` (stadium) | Small circle for start/end; stadium for labels |
 | Junction / merge point | `circle(node_id=…, node_kind="junction", r=4–6)` | Tiny; auto-snaps edges |
@@ -52,13 +52,18 @@ The default type and the one this skill is tuned for (see `evals/`).
 | Database | `database(node_id=…, fill=S-tier)` | Green tier in S3 |
 | Queue / bus / message broker (hub) | `hexagon(node_id=…, fill="#FFF2CC", stroke="#D6B656")` | **Place at the geometric center** of its clients |
 | Gateway / load balancer | `hexagon(node_id=…, fill=S-tier)` | Orange tier in S3 |
-| External system / 3rd-party API | `component(node_id=…, dashed=True, fill="#F5F5F5", stroke="#666666")` | Dashed = outside your boundary |
+| External system / 3rd-party API | `component(node_id=…, extra='stroke-dasharray="6,3"', fill="#F5F5F5", stroke="#666666")` | Dashed border = outside your boundary |
 | Sync call | `connect(a, side, b, side, marker_end="arrowhead")` | Solid |
 | Async / event | `connect(…, dashed=True)` | Dashed |
 
 **Layout**: TB by default; switch to LR only when there are ≤3 tiers and the flow reads left→right. Hub nodes (queue/gateway) sit on the center column; clients radiate symmetrically so edges enter from different sides (zero crossings). Tier gap ≥40px; same-tier node gap ≥30px. Wrap each tier in a layer rect.
 
 ## Flowchart
+
+> **Role palette**: the fills below are a self-contained, evaluator-verified
+> palette where **color = flowchart role** (green = start/end, blue = process,
+> yellow = decision, orange = I/O, purple = subprocess). It is an alternative
+> to S1–S4, NOT a tier of them — pick it *or* an S-scheme and stay in one.
 
 | Element | Primitive | Notes |
 | :--- | :--- | :--- |
@@ -75,6 +80,12 @@ The default type and the one this skill is tuned for (see `evals/`).
 
 Ideal for paper figures (NeurIPS/ICML style). Leverages `formula()` for tensor shapes.
 
+> **Role palette**: the fills below are a self-contained, evaluator-verified
+> palette where **color = layer type** (green = I/O, blue = conv/pool, purple =
+> attention, yellow = recurrent, orange = linear, red = loss/activation). It
+> is an alternative to S1–S4, NOT a tier of them — pick it *or* an S-scheme
+> (e.g. S4 when one layer is the focal "hero") and stay in one.
+
 | Element | Primitive | Fill (by layer type) |
 | :--- | :--- | :--- |
 | Layer block | `rect(node_id=…)` | Input/Output → `#D5E8D4`/`#82B366`; Conv/Pool → `#DAE8FC`/`#6C8EBF`; Attention/Transformer → `#E1D5E7`/`#9673A6`; RNN/LSTM/GRU → `#FFF2CC`/`#D6B656`; FC/Linear → `#FFE6CC`/`#D79B00`; Loss/Activation → `#F8CECC`/`#B85450` |
@@ -88,7 +99,7 @@ Ideal for paper figures (NeurIPS/ICML style). Leverages `formula()` for tensor s
 
 | Element | Primitive | Notes |
 | :--- | :--- | :--- |
-| Table (entity) | `rect(role="layer", node_id=…, fill="#DAE8FC", stroke="#6C8EBF")` | Container; header row is the table name |
+| Table (entity) | `rect(role="layer", node_id=…, fill="#D5E1EB", stroke="#1B3A5C")` | Container (S1 L1 blue); header row is the table name |
 | Column row | `rect(...)` child inside the table | One per column; PK row in `weight="bold"` |
 | PK marker | `text("PK", weight="bold")` prefix or `text("🔑")` | Prefix the column label |
 | FK relationship | `connect(…, dashed=True)` | Dashed; label with the FK column |
@@ -154,7 +165,7 @@ These are the per-type spacing defaults. They all satisfy the evaluator floors (
 ## Evaluator constraints to keep in mind
 
 - **Font tiers**: 3–4 per diagram, adjacent tiers ≥1.15× apart (e.g. 20 / 14 / 12 / 10). Header / node-label / annotation / tensor-shape is a natural 4-tier split.
-- **Palette**: ≤8 accents. Pick one scheme (S1–S4) and stay in it — don't mix tier colors from different schemes.
+- **Palette**: ≤8 accents. Pick one palette — an S1–S4 scheme OR a type's self-contained role palette (see Flowchart / ML above) — and stay in it; don't mix colors from different palettes.
 - **Containers**: nodes fully inside a layer rect need ≥20px gutter on every side.
 - **Edges**: gray (`#4D4D4D`), never colored; arrowheads via `marker_end="arrowhead"`.
 - **Hubs** (queue/gateway/broker): if multiple clients connect to one, fan them around it so edges enter from different sides — a single-side fan stack triggers the evaluator's bend/stretch warnings.

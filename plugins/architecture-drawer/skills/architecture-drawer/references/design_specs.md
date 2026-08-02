@@ -13,7 +13,7 @@ Pick by **information need** first — color must earn its place by encoding a c
 | Distinguish 2–4 classes / branches / roles / lanes | **S2 Categorical** | Colorblind-safe hue separation — use whenever the eye must group by category |
 | Component **type** has a fixed meaning (cloud / network device) | **S3 Semantic** | One color per type, consistent across every diagram |
 | One focal element (innovation / core / hero module) | **S4 Duotone** | Cool body + single warm accent that pops |
-| Pure layering / pipeline, **no** class or type distinction (or ≥5 same-tier modules) | S1 Monochrome Blue | Single-hue luminance tiers — uniform, grayscale-safe |
+| Pure layering / pipeline, **no** class or type distinction (or ≥4 same-tier modules) | S1 Monochrome Blue | Single-hue luminance tiers — uniform, grayscale-safe |
 | Grayscale print / technical report | S1 | Pure luminance ramp is inherently gray-safe |
 
 **S1 is the fallback, not the default.** Match an information need above first; only fall back to S1 when the diagram is genuinely just layered flow with no categorical / semantic / focal role for color. Defaulting everything to blue wastes the palette and makes every diagram look the same.
