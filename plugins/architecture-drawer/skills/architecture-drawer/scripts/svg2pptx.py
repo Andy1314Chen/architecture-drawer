@@ -266,6 +266,11 @@ def _flatten_path(d: str, tol: float = 1.0):
     closed = False
     cx = cy = 0.0  # current point
     sx = sy = 0.0  # subpath start point
+    # Last Bezier control point for S/T smooth-curve reflection. Local (not
+    # module-level) so each path flattening is independent; reset to the current
+    # point after any non-curve command per the SVG spec (S/T only reflect when
+    # the immediately preceding command was C/S or Q/T respectively).
+    last_ctrl = [0.0, 0.0]
 
     def moveto(x, y, relative=False):
         nonlocal cx, cy, sx, sy
@@ -294,18 +299,22 @@ def _flatten_path(d: str, tol: float = 1.0):
             # subsequent pairs are implicit lineto
             for px2, py2 in _pairs(it):
                 lineto(px2, py2, cmd == "m")
+            last_ctrl[0], last_ctrl[1] = cx, cy  # M is not a curve command
 
         elif cmd in ("L", "l"):
             for x, y in _pairs(it):
                 lineto(x, y, cmd == "l")
+            last_ctrl[0], last_ctrl[1] = cx, cy
 
         elif cmd in ("H", "h"):
             for x in it:
                 lineto(x if cmd == "H" else cx + x, cy)
+            last_ctrl[0], last_ctrl[1] = cx, cy
 
         elif cmd in ("V", "v"):
             for y in it:
                 lineto(cx, y if cmd == "V" else cy + y)
+            last_ctrl[0], last_ctrl[1] = cx, cy
 
         elif cmd in ("C", "c"):
             for x1, y1, x2, y2, x3, y3 in _group(it, 6):
@@ -314,6 +323,7 @@ def _flatten_path(d: str, tol: float = 1.0):
                     x2, y2 = cx + x2, cy + y2
                     x3, y3 = cx + x3, cy + y3
                 _flatten_cubic(cx, cy, x1, y1, x2, y2, x3, y3, tol, points)
+                last_ctrl[0], last_ctrl[1] = x2, y2  # 2nd control point for S reflection
                 cx, cy = x3, y3
 
         elif cmd in ("S", "s"):
@@ -322,10 +332,10 @@ def _flatten_path(d: str, tol: float = 1.0):
                 if cmd == "s":
                     x2, y2 = cx + x2, cy + y2
                     x3, y3 = cx + x3, cy + y3
-                x1 = 2 * cx - _last_ctrl[0]
-                y1 = 2 * cy - _last_ctrl[1]
+                x1 = 2 * cx - last_ctrl[0]
+                y1 = 2 * cy - last_ctrl[1]
                 _flatten_cubic(cx, cy, x1, y1, x2, y2, x3, y3, tol, points)
-                _last_ctrl[0], _last_ctrl[1] = x2, y2
+                last_ctrl[0], last_ctrl[1] = x2, y2
                 cx, cy = x3, y3
 
         elif cmd in ("Q", "q"):
@@ -334,17 +344,17 @@ def _flatten_path(d: str, tol: float = 1.0):
                     x1, y1 = cx + x1, cy + y1
                     x2, y2 = cx + x2, cy + y2
                 _flatten_quad(cx, cy, x1, y1, x2, y2, tol, points)
-                _last_ctrl[0], _last_ctrl[1] = x1, y1
+                last_ctrl[0], last_ctrl[1] = x1, y1
                 cx, cy = x2, y2
 
         elif cmd in ("T", "t"):
             for x2, y2 in _pairs(it):
                 if cmd == "t":
                     x2, y2 = cx + x2, cy + y2
-                x1 = 2 * cx - _last_ctrl[0]
-                y1 = 2 * cy - _last_ctrl[1]
+                x1 = 2 * cx - last_ctrl[0]
+                y1 = 2 * cy - last_ctrl[1]
                 _flatten_quad(cx, cy, x1, y1, x2, y2, tol, points)
-                _last_ctrl[0], _last_ctrl[1] = x1, y1
+                last_ctrl[0], last_ctrl[1] = x1, y1
                 cx, cy = x2, y2
 
         elif cmd in ("A", "a"):
@@ -354,17 +364,16 @@ def _flatten_path(d: str, tol: float = 1.0):
                 _arc_to_cubics(cx, cy, rx_, ry_, angle, bool(large),
                                bool(sweep), x, y, tol, points)
                 cx, cy = x, y
+            last_ctrl[0], last_ctrl[1] = cx, cy  # A is not a C/S/Q/T command
 
         elif cmd in ("Z", "z"):
             closed = True
             cx, cy = sx, sy
+            last_ctrl[0], last_ctrl[1] = cx, cy
 
     if points:
         subpaths.append((points, closed))
     return subpaths
-
-
-_last_ctrl = [0.0, 0.0]  # last Bezier control point (for S/T smooth commands)
 
 
 def _pairs(it):
@@ -522,6 +531,10 @@ class MarkerDef:
     ref_y: float = 4
     fill: str = "#000000"
     points: list = field(default_factory=list)  # polygon points
+    # markerUnits: "strokeWidth" (SVG default — marker dims scale with the
+    # path's stroke-width) or "userSpaceOnUse" (1:1). SVGDrawer markers omit
+    # the attribute, so the default "strokeWidth" applies and must be honoured.
+    marker_units: str = "strokeWidth"
 
 
 def _parse_markers(root: ET.Element) -> dict[str, MarkerDef]:
@@ -532,6 +545,7 @@ def _parse_markers(root: ET.Element) -> dict[str, MarkerDef]:
         if tag == "marker":
             mid = m.get("id", "")
             md = MarkerDef(id=mid)
+            md.marker_units = m.get("markerUnits", "strokeWidth")
             md.width = _float(m.get("markerWidth", "10"))
             md.height = _float(m.get("markerHeight", "8"))
             md.ref_x = _float(m.get("refX", "0"))
@@ -553,21 +567,27 @@ def _parse_markers(root: ET.Element) -> dict[str, MarkerDef]:
     return markers
 
 
-def _render_marker(shape_collection, marker: MarkerDef, x, y, ux, uy, scale, offset_x, offset_y):
+def _render_marker(shape_collection, marker: MarkerDef, x, y, ux, uy,
+                   scale, offset_x, offset_y, stroke_width=1.0):
     """Render an arrowhead marker as a freeform triangle at endpoint (x,y).
 
     The marker is oriented so its x-axis aligns with direction (ux, uy).
+    markerUnits=strokeWidth (the SVG default) scales marker dimensions by the
+    owning path's stroke-width; userSpaceOnUse renders at 1:1.
     """
     if not marker.points:
         return
+    ms = stroke_width if marker.marker_units == "strokeWidth" else 1.0
+    ref_x = marker.ref_x * ms
+    ref_y = marker.ref_y * ms
     # Perpendicular to direction
     nx, ny = -uy, ux
     # Transform each marker-space point to world space:
-    # world = endpoint + (mx - refX) * u + (my - refY) * n
+    # world = endpoint + (mx*ms - refX) * u + (my*ms - refY) * n
     world_pts = []
     for mx, my in marker.points:
-        wx = x + (mx - marker.ref_x) * ux + (my - marker.ref_y) * nx
-        wy = y + (mx - marker.ref_x) * uy + (my - marker.ref_y) * ny
+        wx = x + (mx * ms - ref_x) * ux + (my * ms - ref_y) * nx
+        wy = y + (mx * ms - ref_x) * uy + (my * ms - ref_y) * ny
         world_pts.append((wx, wy))
     _add_freeform(shape_collection, world_pts, True, SvgStyle(fill=marker.fill),
                   scale, offset_x, offset_y)
@@ -1007,7 +1027,7 @@ class _Converter:
                 dx, dy = p2[0] - p1[0], p2[1] - p1[1]
                 seglen = math.hypot(dx, dy) or 1.0
                 ux, uy = dx / seglen, dy / seglen
-                _render_marker(shapes, marker, p2[0], p2[1], ux, uy, scale, ox, oy)
+                _render_marker(shapes, marker, p2[0], p2[1], ux, uy, scale, ox, oy, style.stroke_width)
 
         marker_start = el.get("marker-start", "")
         if marker_start:
@@ -1017,7 +1037,7 @@ class _Converter:
                 dx, dy = p1[0] - p2[0], p1[1] - p2[1]
                 seglen = math.hypot(dx, dy) or 1.0
                 ux, uy = dx / seglen, dy / seglen
-                _render_marker(shapes, marker, p1[0], p1[1], ux, uy, scale, ox, oy)
+                _render_marker(shapes, marker, p1[0], p1[1], ux, uy, scale, ox, oy, style.stroke_width)
 
     def _make_polygon(self, el, tag, transform, style, shapes, scale, ox, oy):
         pts_str = el.get("points", "")
@@ -1052,7 +1072,7 @@ class _Converter:
                     dx, dy = p2[0] - p1[0], p2[1] - p1[1]
                     seglen = math.hypot(dx, dy) or 1.0
                     ux, uy = dx / seglen, dy / seglen
-                    _render_marker(shapes, marker, p2[0], p2[1], ux, uy, scale, ox, oy)
+                    _render_marker(shapes, marker, p2[0], p2[1], ux, uy, scale, ox, oy, style.stroke_width)
 
     def _add_image(self, svg_content, slide, vb_w, vb_h, prs):
         """Rasterize SVG to PNG via rsvg-convert and embed as a picture."""

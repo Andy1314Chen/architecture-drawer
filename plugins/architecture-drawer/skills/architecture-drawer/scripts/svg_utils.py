@@ -474,9 +474,10 @@ class SVGDrawer:
         # A rebuild MUST emit exactly as many elements as it replaces, or every
         # later _emit_range index (other nodes', edges') silently shifts and
         # corrupts the element list.
-        assert len(new_elems) == e - s, (
-            f"relocate_node('{node_id}'): node rebuild emitted "
-            f"{len(new_elems)} elements, expected {e - s}")
+        if len(new_elems) != e - s:
+            raise RuntimeError(
+                f"relocate_node('{node_id}'): node rebuild emitted "
+                f"{len(new_elems)} elements, expected {e - s}")
         self.elements[s:e] = new_elems
         if node._bbox_index is not None:
             self.bboxes[node._bbox_index] = node._rebuild_bbox(new_x, new_y)
@@ -489,9 +490,10 @@ class SVGDrawer:
             if node_id in (edge.from_id, edge.to_id):
                 es, ee = edge._emit_range
                 new_xmls, (nstart, nend, npath_d) = edge._rebuild_xml()
-                assert len(new_xmls) == ee - es, (
-                    f"relocate_node('{node_id}'): edge '{edge.id}' rebuild "
-                    f"emitted {len(new_xmls)} elements, expected {ee - es}")
+                if len(new_xmls) != ee - es:
+                    raise RuntimeError(
+                        f"relocate_node('{node_id}'): edge '{edge.id}' rebuild "
+                        f"emitted {len(new_xmls)} elements, expected {ee - es}")
                 self.elements[es:ee] = new_xmls
                 edge.start, edge.end, edge.path_d = nstart, nend, npath_d
         return True
@@ -728,11 +730,15 @@ class SVGDrawer:
         id_attr = f'id="{id}"' if id else ""
         tab1 = f'<rect x="-8" y="{h*0.3}" width="16" height="8" rx="1" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"{ra}/>'
         tab2 = f'<rect x="-8" y="{h*0.55}" width="16" height="8" rx="1" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"{ra}/>'
+        # Tabs protrude 8px LEFT of the box (x="-8" inside the translate group),
+        # so the collision bbox must extend left by 8 to catch a left-side
+        # neighbor — otherwise a component abutting another node on its left
+        # would skip the collision check.
         self.add_element(
             f'<g transform="translate({x},{y})" {id_attr}>'
             f'<rect width="{w}" height="{h}" rx="4" ry="4" fill="{fill}" stroke="{stroke}" '
             f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{ra} {extra}/>'
-            f'{tab1}{tab2}</g>', BBox(x, y, w, h) if bbox else None)
+            f'{tab1}{tab2}</g>', BBox(x - 8, y, w + 8, h) if bbox else None)
         self._record_color(fill, stroke)
         if node_id:
             self.register_node(node_id, x, y, w, h, kind=node_kind,
