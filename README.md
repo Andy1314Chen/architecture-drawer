@@ -144,7 +144,7 @@ architecture-drawer/
 │       ├── SKILL.md                             # agent-consumable workflow (spec-compliant)
 │       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 preset color schemes (S1–S4)
-│       ├── evals/                               # 7 regression cases (gen.py each)
+│       ├── evals/                               # 8 regression cases (7 architecture + 1 flowchart, gen.py each)
 │       └── assets/
 ├── tests/                                       # pytest: layered regression (see "Testing")
 │   ├── conftest.py                              # fixtures, thresholds, score helpers, CLI options

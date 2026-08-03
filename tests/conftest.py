@@ -39,6 +39,7 @@ SCORE_THRESHOLDS = {
     "20260729_llama_cpp_arch": 90,
     "20260729_pi_agent_architecture": 100,
     "20260730_vllm_arch": 90,
+    "20260802_100000_cicd_pipeline_flow": 96,
 }
 
 # Minimum acceptable score for LLM-replayed diagrams. One-shot LLM output has

@@ -148,7 +148,7 @@ architecture-drawer/
 │       ├── SKILL.md                             # Agent 可读的工作流规范
 │       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 套预设配色方案（S1–S4）
-│       ├── evals/                               # 7 个回归测试用例（每个含 gen.py）
+│       ├── evals/                               # 8 个回归测试用例（7 架构 + 1 流程图，每个含 gen.py）
 │       └── assets/
 ├── tests/                                       # pytest：分层回归（见“测试”）
 │   ├── conftest.py                              # fixtures、阈值、评分助手、CLI 选项

@@ -84,6 +84,31 @@ layers; all confirmed. Fixed in one pass:
 Verification: `pytest -q` green (2 opt-in skips); in-process functional checks
 of the timeout branch + plateau early-exit pass.
 
+## 2026-08-02 — first flowchart eval case (cicd_pipeline_flow)
+
+Added `evals/20260802_100000_cicd_pipeline_flow/` — the first non-architecture
+diagram in the suite. All 7 prior cases are system/cloud architecture; none
+used `decision()` (diamond) or the flowchart role palette.
+
+- **Coverage gained**: green `circle()` terminators, yellow `decision()`
+  diamonds (zero prior usages), orange `hexagon()` as I/O, blue process
+  `rect()`, purple double-border subprocess (decorative inset `rect()` with
+  `role="decoration"`). Two decision diamonds branch "No" left and converge on
+  one shared failure terminator.
+- **Score: 96.** Every check PASS except the palette WARN (-4): the 5-role
+  flowchart palette = 10 accent hex values > `max_colors=8`. This is the
+  documented, justified >8 scheme (hard cap 12, no FAIL) — the case locks in
+  that the WARN path is non-fatal and the role palette is evaluator-clean.
+- **Two layout traps hit & fixed** (score 48 → 96 in one pass):
+  1. Terminator labels drawn INSIDE the circles tripped the text-overlap check
+     (text-on-own-shape) → labels now placed OFF the circle (right of spine /
+     left of failure column).
+  2. 是/否 branch flags sat ON the edge lines → both text-overlap AND
+     edge-through-text. Fixed by auto-detecting edge axis and offsetting
+     perpendicular (vertical edge → label right; horizontal edge → label above).
+- **Determinism**: gen.py output is byte-identical across runs (gen==golden).
+Threshold locked at 96; golden seeded; `pytest -q` green.
+
 ## Conventions
 - Dates ISO. Newest first.
 - BLOCKED items: state the external blocker + what unblocks it.
