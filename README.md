@@ -119,6 +119,20 @@ The agent generates a `gen.py` that imports three pure-Python modules (`svg_util
 | `rsvg-convert` | PNG rasterization (`rasterize_svg`) | `apt install librsvg2-bin` / `brew install librsvg` |
 | `pytest >= 8` | Running the test suite | `pip install pytest` |
 
+## Testing
+
+The suite is layered so each layer is cheap, deterministic, and covers a distinct failure mode:
+
+| Layer | Command | What it gates | Runs in CI |
+|-------|---------|---------------|-----------|
+| **Deterministic regression** | `pytest` | each `evals/<name>/gen.py` scores ≥ its threshold and matches its golden SVG | ✅ always |
+| **Spec compliance** | `pytest` | `SKILL.md` frontmatter, name↔directory, relative refs, core scripts present | ✅ always |
+| **Doc ↔ API drift guard** | `pytest` | every `drawer.<m>(` documented in `SKILL.md`/`references/*.md` exists on `SVGDrawer`; curated public API importable | ✅ always |
+| **LLM replay** (Protocol A) | `pytest --llm-replay` | regenerate `gen.py` from `input.md`+`SKILL.md` (no golden), iterate, assert score ≥80 | nightly / local |
+| **Agent replay** (Protocol B) | `pytest --agent-replay` | install the skill into a leak-free sandbox, let the **Pi coding agent** author `gen.py`, assert score ≥80 + full SVG/PPTX/PNG artifact triplet | nightly / local |
+
+The agent-replay layer is the closest to real usage: the skill is *installed* (never inlined), a real agent discovers it via its native skill mechanism, and the harness — not the agent — re-runs the produced `gen.py` deterministically. It needs the [`pi`](https://pi.dev) CLI and a provider key; backend wiring lives in `tests/agent_backends.py`. Options: `--agent-iter N` caps the stateless refine rounds (default 3), `--agent-eval <name>` scopes it to one case for cheap debugging (a name matching nothing fails loudly rather than silently skipping), and `--agent-keep` retains each case's output (agent-written `gen.py` + SVG/PNG/PPTX + `score_report.txt`) under `output/agent_replay/<name>/` for review (gitignored).
+
 ## Repository layout
 
 ```
@@ -132,10 +146,13 @@ architecture-drawer/
 │       ├── references/design_specs.md           # 4 preset color schemes (S1–S4)
 │       ├── evals/                               # 7 regression cases (gen.py each)
 │       └── assets/
-├── tests/                                       # pytest: score thresholds + SVG golden snapshots
-│   ├── conftest.py
-│   ├── test_regression.py
+├── tests/                                       # pytest: layered regression (see "Testing")
+│   ├── conftest.py                              # fixtures, thresholds, score helpers, CLI options
+│   ├── agent_backends.py                        # Pi coding-agent backend + leak-free sandbox builder
+│   ├── test_regression.py                       # deterministic quality+snapshot; opt-in LLM replay
 │   ├── test_skill_spec.py                       # Agent Skills spec compliance
+│   ├── test_doc_api.py                          # doc ↔ API drift guard (always on)
+│   ├── test_agent_replay.py                     # opt-in real-agent replay (Protocol B)
 │   └── golden/*.svg                             # snapshot baselines
 └── examples/                                    # minimal demo of the generate-evaluate-export loop
 ```

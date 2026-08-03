@@ -75,11 +75,32 @@ def pytest_addoption(parser):
         "--llm-iter", action="store", type=int, default=3,
         help="Max LLM correction rounds (generate + N fix iterations). Default 3.",
     )
+    parser.addoption(
+        "--agent-replay", action="store_true", default=False,
+        help="Replay evals via a real agent backend (pi coding agent): install "
+             "the skill into a leak-free sandbox, let the agent author gen.py, "
+             "and use the harness as the deterministic score gate. Needs 'pi' CLI.",
+    )
+    parser.addoption(
+        "--agent-iter", action="store", type=int, default=3,
+        help="Max agent correction rounds for --agent-replay. Default 3.",
+    )
+    parser.addoption(
+        "--agent-eval", action="store", default=None,
+        help="Restrict --agent-replay to a single eval directory name (debug).",
+    )
+    parser.addoption(
+        "--agent-keep", action="store_true", default=False,
+        help="Retain agent-replay artifacts (agent-written gen.py + SVG/PNG/PPTX "
+             "+ score report) under output/agent_replay/<eval_name>/ instead of "
+             "deleting the sandbox. Default off (leak-free).",
+    )
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "regression: eval-case quality + snapshot test")
     config.addinivalue_line("markers", "llm_replay: LLM-replayed quality (opt-in via --llm-replay)")
+    config.addinivalue_line("markers", "agent_replay: real-agent replayed quality (opt-in via --agent-replay)")
 
 @pytest.fixture(scope="session")
 def eval_cases():
@@ -124,6 +145,36 @@ def run_gen(eval_dir: Path):
             f"gen.py produced no .svg in {eval_dir.name}.\nstdout:\n{proc.stdout[-1000:]}"
         )
     return score, svgs[0].read_text(encoding="utf-8")
+
+def score_gen_script(cwd: Path, gen: str = "gen.py") -> tuple[int | None, str]:
+    """Deterministic gate for agent-produced generators.
+
+    Runs ``<cwd>/<gen>`` as a subprocess and returns ``(score, report)`` where
+    score is the last integer matched by ``_SCORE_RE`` (or ``None`` when the
+    script errors / prints no score; report then carries stderr for feedback).
+
+    Unlike ``_run_and_score`` it injects no ``PYTHONPATH``: the agent's own
+    skill-path resolution must stand on its merits so a broken resolution
+    surfaces as a failure the refine loop can repair.
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, gen],
+            cwd=str(cwd), capture_output=True, text=True, timeout=180,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # A timeout is a fixable failure: surface it as a score-less report
+        # so the refine loop gets a chance to repair a slow/looping script
+        # rather than aborting the whole case.
+        partial = (exc.stdout or "") + "\n" + (exc.stderr or "")
+        return None, f"timed out after {exc.timeout}s\n" + partial[-2000:]
+    combined = proc.stdout + "\n" + proc.stderr
+    if proc.returncode != 0:
+        return None, combined[-2000:]
+    matches = _SCORE_RE.findall(combined)
+    if not matches:
+        return None, "no score printed\n" + proc.stdout[-1500:]
+    return int(matches[-1]), combined
 
 
 def _extract_code(text: str) -> str:
@@ -221,10 +272,16 @@ def _run_and_score(code: str) -> tuple[int | None, str, str]:
         env["PYTHONPATH"] = (
             str(SCRIPTS) + os.pathsep + env.get("PYTHONPATH", "")
         )
-        proc = subprocess.run(
-            [sys.executable, str(gen_path)],
-            cwd=tmp, capture_output=True, text=True, timeout=180, env=env,
-        )
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(gen_path)],
+                cwd=tmp, capture_output=True, text=True, timeout=180, env=env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            # Surface as a score-less report so replay_gen's refine loop can
+            # attempt a repair instead of crashing the case.
+            partial = (exc.stdout or "") + "\n" + (exc.stderr or "")
+            return None, f"timed out after {exc.timeout}s\n" + partial[-2000:], exc.stdout or ""
     combined = proc.stdout + "\n" + proc.stderr
     if proc.returncode != 0:
         return None, combined[-2000:], proc.stdout
@@ -253,6 +310,7 @@ def replay_gen(eval_dir: Path, max_iter: int = 3) -> int:
     code = _llm_generate(_build_replay_prompt(skill_md, input_md))
     best_score, best_code = None, code
 
+    prev_score: int | None = None
     for iteration in range(max_iter + 1):  # 1 generate + max_iter fixes
         score, report, _ = _run_and_score(code)
         if score is None:
@@ -265,7 +323,18 @@ def replay_gen(eval_dir: Path, max_iter: int = 3) -> int:
             fail_lines = [ln for ln in report.splitlines() if "[FAIL]" in ln]
             if score >= 100 and not fail_lines:
                 break
+            # Early exit: already past the floor with no FAIL and the last
+            # correction round made no progress — burning another LLM call
+            # is unlikely to help. Mirrors Protocol B's loop.
+            if (
+                prev_score is not None
+                and score >= LLM_REPLAY_MIN_SCORE
+                and not fail_lines
+                and score <= prev_score
+            ):
+                break
             report_text = report
+        prev_score = score
         if iteration == max_iter:
             break
         # Correction round: feed code + report back to the LLM.
@@ -277,4 +346,5 @@ def replay_gen(eval_dir: Path, max_iter: int = 3) -> int:
 __all__ = [
     "ROOT", "SKILL", "SCRIPTS", "EVALS", "GOLDEN",
     "SCORE_THRESHOLDS", "LLM_REPLAY_MIN_SCORE", "run_gen", "replay_gen",
+    "score_gen_script",
 ]

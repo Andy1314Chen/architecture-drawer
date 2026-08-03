@@ -5,6 +5,26 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Agent replay (Protocol B)** — `tests/test_agent_replay.py` + `tests/agent_backends.py`: an opt-in regression layer (`pytest --agent-replay`) that installs the skill into a leak-free sandbox (the golden `evals/` generators are never copied), lets the **Pi coding agent** (pi.dev) discover it via its native skill mechanism and self-author `gen.py` from `input.md`, then uses the harness as the deterministic gate — re-running the produced `gen.py` and asserting score ≥ `LLM_REPLAY_MIN_SCORE` plus a full SVG/PPTX/PNG artifact triplet. Refine rounds are stateless. New CLI options `--agent-iter` (default 3), `--agent-eval <name>`, and `--agent-keep` (retain each case's sandbox under `output/agent_replay/<name>/`).
+- **Doc ↔ API drift guard** — `tests/test_doc_api.py`: a deterministic, always-on test that scans fenced code blocks in `SKILL.md` + `references/*.md` for `drawer.<m>(` and asserts each exists on `SVGDrawer`, plus a curated public-module-function importability check. Catches doc ↔ API drift in the default CI gate.
+- **`score_gen_script()`** in `tests/conftest.py`: shared deterministic gate for agent-produced generators (injects no `PYTHONPATH` so broken skill-path resolution surfaces as a fixable failure).
+- **`--agent-keep` artifact retention** for `--agent-replay`: copies each case's sandbox (agent-written `gen.py` + SVG/PNG/PPTX + installed skill + `score_report.txt`) to `output/agent_replay/<eval_name>/`. Default off (leak-free). `output/` is gitignored.
+
+### Changed
+- Documented the layered test matrix in `AGENTS.md` and `README.md` (deterministic regression · spec · doc-API · LLM replay · agent replay).
+
+### Fixed
+- **Agent/LLM-replay robustness pass** on the opt-in `--agent-replay` / `--llm-replay` layers:
+  - Refine loops (Protocol A `replay_gen` and Protocol B) now **early-exit** when a score already past `LLM_REPLAY_MIN_SCORE` with no `[FAIL]` items plateaus (no gain over the previous round), instead of burning every refine round — each a full agent/LLM call — chasing a 100 it isn't reaching.
+  - `score_gen_script()` / `_run_and_score()` **timeouts** (180 s) now return a score-less `"timed out"` report so the refine loop can repair a slow/looping script, instead of aborting the whole case as an "agent run error".
+  - `--agent-eval <name>` matching **no** eval case now **fails loudly** (listing the available names) instead of silently `skip`-ping green.
+  - `--agent-keep` **persist failures** no longer mask the case result or leak the sandbox — the `rmtree` cleanup always runs.
+  - The leak-free sandbox no longer copies `scripts/__pycache__` / `*.pyc` (`shutil.copytree` now ignores `__pycache__`).
+  - Synced the agent-replay CLI flags (`--agent-iter`, `--agent-eval`, `--agent-keep`) in both READMEs.
+
 ## [1.0.0] — 2026-07-30
 
 First public release. Extracted from an internal `ppt-agent` workspace and

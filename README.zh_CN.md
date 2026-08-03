@@ -122,6 +122,21 @@ Agent 生成的 `gen.py` 会导入 skill 内的三个纯 Python 模块（`svg_ut
 | `rsvg-convert` | PNG 栅格化（`rasterize_svg`） | `apt install librsvg2-bin` / `brew install librsvg` |
 | `pytest >= 8` | 运行测试套件 | `pip install pytest` |
 
+
+## 测试
+
+测试套件分层设计，每层成本低、确定性强、覆盖不同的失败模式：
+
+| 层级 | 命令 | 门禁内容 | 是否在 CI |
+|------|------|---------|-----------|
+| **确定性回归** | `pytest` | 每个 `evals/<name>/gen.py` 分数 ≥ 其阈值且匹配 golden SVG | ✅ 总是 |
+| **规范合规** | `pytest` | `SKILL.md` frontmatter、name↔目录、相对路径引用、核心脚本齐全 | ✅ 总是 |
+| **文档 ↔ API 漂移守卫** | `pytest` | `SKILL.md`/`references/*.md` 中所有 `drawer.<m>(` 都存在于 `SVGDrawer`；公共 API 可导入 | ✅ 总是 |
+| **LLM 重放**（协议 A） | `pytest --llm-replay` | 仅凭 `input.md`+`SKILL.md`（不含 golden）重新生成 `gen.py`，迭代修正，断言分数 ≥80 | 每夜 / 本地 |
+| **Agent 重放**（协议 B） | `pytest --agent-replay` | 把 skill 安装进无泄漏沙箱，让 **Pi 编码 Agent** 自主编写 `gen.py`，断言分数 ≥80 + 完整的 SVG/PPTX/PNG 产物三元组 | 每夜 / 本地 |
+
+Agent 重放层最贴近真实使用：skill 被*安装*（绝非内联），真实 Agent 通过其原生 skill 机制发现它，而 harness——而非 Agent——确定性重跑产出的 `gen.py`。它需要 [`pi`](https://pi.dev) CLI 与一个 provider key，后端接线在 `tests/agent_backends.py`。选项：`--agent-iter N` 限定无状态修正轮数（默认 3），`--agent-eval <name>` 只跑一个用例以便低成本调试（名称无匹配时会显式报错而非静默跳过），`--agent-keep` 把每个用例的产物（Agent 写的 `gen.py` + SVG/PNG/PPTX + `score_report.txt`）保留到 `output/agent_replay/<name>/` 供复盘（已 gitignore）。
+
 ## 仓库结构
 
 ```
@@ -135,10 +150,13 @@ architecture-drawer/
 │       ├── references/design_specs.md           # 4 套预设配色方案（S1–S4）
 │       ├── evals/                               # 7 个回归测试用例（每个含 gen.py）
 │       └── assets/
-├── tests/                                       # pytest：分数阈值 + SVG 快照比对
-│   ├── conftest.py
-│   ├── test_regression.py
-│   ├── test_skill_spec.py                       # Agent Skills 规范合规检测
+├── tests/                                       # pytest：分层回归（见“测试”）
+│   ├── conftest.py                              # fixtures、阈值、评分助手、CLI 选项
+│   ├── agent_backends.py                        # Pi 编码 Agent 后端 + 无泄漏沙箱构建器
+│   ├── test_regression.py                       # 确定性质量+快照；可选 LLM 重放
+│   ├── test_skill_spec.py                       # Agent Skills 规范合规
+│   ├── test_doc_api.py                          # 文档 ↔ API 漂移守卫（常开）
+│   ├── test_agent_replay.py                     # 可选真实 Agent 重放（协议 B）
 │   └── golden/*.svg                             # 快照基线
 └── examples/                                    # 生成-评估-导出循环的最小示例
 ```
