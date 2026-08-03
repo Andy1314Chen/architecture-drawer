@@ -25,7 +25,7 @@ Turn **text descriptions** of an architecture into **editable PPT diagrams**: th
 ## Showcase
 
 
-All diagrams below were generated entirely from text descriptions by the skill, then scored by the 13-dimension evaluator (each scored ≥76/100). They double as the regression suite under `evals/`.
+All diagrams below were generated entirely from text descriptions by the skill, then scored by the 13-dimension evaluator (each scored ≥76/100). They double as the regression suite under `evals/` — including the first non-architecture case (a process flowchart).
 
 ### vLLM — High-Throughput LLM Inference Serving (PagedAttention)
 
@@ -44,6 +44,12 @@ A 4-layer × multi-column matrix (graph optimization → transformation → lowe
 ![](docs/showcase/agent_infra_architecture.png)
 
 Five horizontal layers (application → orchestration → core capabilities → execution → infrastructure) with a cross-cutting security/observability band. Bilingual CN/EN labels. *Neutral grays + 5 colored core modules.*
+
+### CI/CD Deployment Pipeline — Process Flowchart
+
+![](docs/showcase/cicd_pipeline_flow.png)
+
+The first non-architecture case: a top-to-bottom **process flowchart** with four quality-gate decisions (Build → Lint/SAST → Tests → Smoke) whose "No" branches converge via gray junction merge points onto a single Failed terminator. Green terminators · yellow decision diamonds · orange I/O hexagon · purple double-border subprocesses. *Flowchart role palette (color = role).*
 
 ## Best Practices
 
