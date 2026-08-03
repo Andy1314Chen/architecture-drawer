@@ -28,9 +28,14 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent
 NAME = "cicd_pipeline_flow"
 
-W, H = 1000, 1720
-CX = 500                       # center spine x
-BX = 210                       # left failure-column x
+# Compact TB layout: ~105px center-to-center (well above the evaluator's
+# ≥14px min gap — the diamond's 84px height needs ≥84px c2c). Render the PNG
+# at 2× width for crisp display on high-DPI screens (SVG is vector, so the
+# upscale is lossless).
+W, H = 1000, 1520
+PNG_W = W * 2          # 2× rasterize for a sharp showcase PNG
+CX = 500               # center spine x
+BX = 210               # left failure-column x
 
 # --- flowchart role palette (color = role) -------------------------------
 GRN_F, GRN_S = "#D5E8D4", "#82B366"   # start / end terminator
@@ -50,9 +55,9 @@ d = SVGDrawer(W, H, bg="#FFFFFF")
 d.arrow_head("ah", EDGE)
 
 # --- title ----------------------------------------------------------------
-d.text(CX, 42, "CI/CD 部署流水线", font_size=F[0], weight="bold",
+d.text(CX, 38, "CI/CD 部署流水线", font_size=F[0], weight="bold",
        fill=INK, anchor="middle", bbox=BB)
-d.text(CX, 68, "Continuous Integration & Continuous Deployment Pipeline",
+d.text(CX, 62, "Continuous Integration & Continuous Deployment Pipeline",
        font_size=F[2], fill=SUB, anchor="middle", bbox=BB)
 
 # --- geometry helpers -----------------------------------------------------
@@ -132,33 +137,33 @@ def yes_no(start, end, txt):
                fill=SUB, anchor="middle", bbox=BB)
 
 
-# --- nodes: center spine -------------------------------------------------
-term(CX, 120, "start")
-io_hex(CX, 235, "hook", "Webhook", "push · PR merge")
-subprocess_box(CX, 355, "checkout", "检出 & 构建", "git clone · npm ci · compile")
-diamond(CX, 480, "build_ok", "构建成功?", "Build OK?")
-subprocess_box(CX, 615, "lint", "代码检查", "ESLint · MyPy · SAST scan")
-diamond(CX, 740, "lint_ok", "检查通过?", "Lint OK?")
-subprocess_box(CX, 875, "tests", "测试套件", "unit · integration · e2e")
-diamond(CX, 1000, "test_ok", "测试通过?", "Tests Pass?")
-proc(CX, 1135, "staging", "部署预发布", "Deploy Staging · kubectl rolling")
-proc(CX, 1255, "smoke", "冒烟测试", "Smoke Test · health · contract")
-diamond(CX, 1380, "smoke_ok", "冒烟通过?", "Smoke OK?")
-proc(CX, 1515, "deploy", "部署生产", "Deploy Prod · canary → blue-green")
-term(CX, 1635, "released")
+# --- nodes: center spine (compact ~105px c2c) ----------------------------
+term(CX, 105, "start")
+io_hex(CX, 207, "hook", "Webhook", "push · PR merge")
+subprocess_box(CX, 312, "checkout", "检出 & 构建", "git clone · npm ci · compile")
+diamond(CX, 430, "build_ok", "构建成功?", "Build OK?")
+subprocess_box(CX, 548, "lint", "代码检查", "ESLint · MyPy · SAST scan")
+diamond(CX, 666, "lint_ok", "检查通过?", "Lint OK?")
+subprocess_box(CX, 784, "tests", "测试套件", "unit · integration · e2e")
+diamond(CX, 902, "test_ok", "测试通过?", "Tests Pass?")
+proc(CX, 1010, "staging", "部署预发布", "Deploy Staging · kubectl rolling")
+proc(CX, 1115, "smoke", "冒烟测试", "Smoke Test · health · contract")
+diamond(CX, 1233, "smoke_ok", "冒烟通过?", "Smoke OK?")
+proc(CX, 1351, "deploy", "部署生产", "Deploy Prod · canary → blue-green")
+term(CX, 1456, "released")
 
-# --- nodes: failure column -----------------------------------------------
-proc(BX, 480, "notify", "通知失败", "Notify · Slack · Email")
-junction(BX, 740, "m1")
-junction(BX, 1000, "m2")
-term(BX, 1380, "failed")
+# --- nodes: failure column (shares spine y at each decision) -------------
+proc(BX, 430, "notify", "通知失败", "Notify · Slack · Email")
+junction(BX, 666, "m1")
+junction(BX, 902, "m2")
+term(BX, 1233, "failed")
 
-# --- terminator labels (off-circle) --------------------------------------
-d.text(CX + 46, 124, "开始", font_size=F[1], weight="bold", fill=INK,
+# --- terminator labels (off-circle, +4 from center) ----------------------
+d.text(CX + 46, 109, "开始", font_size=F[1], weight="bold", fill=INK,
        anchor="middle", bbox=BB)
-d.text(CX + 50, 1639, "已发布", font_size=F[1], weight="bold", fill=INK,
+d.text(CX + 50, 1460, "已发布", font_size=F[1], weight="bold", fill=INK,
        anchor="middle", bbox=BB)
-d.text(BX - 46, 1384, "失败", font_size=F[1], weight="bold", fill=INK,
+d.text(BX - 46, 1237, "失败", font_size=F[1], weight="bold", fill=INK,
        anchor="middle", bbox=BB)
 
 # --- edges: spine (down) -------------------------------------------------
@@ -228,7 +233,7 @@ for r in rep:
     print(f"  {r}")
 sp = str(OUT / f"{NAME}.svg")
 save_svg(svg, sp)
-rasterize_svg(sp, str(OUT / f"{NAME}.png"), width=W)
+rasterize_svg(sp, str(OUT / f"{NAME}.png"), width=PNG_W)
 try:
     svg_to_pptx(svg, str(OUT / f"{NAME}.pptx"),
                 config=PptxConfig(slide_w=13.333, slide_h=7.5, scale=2.0))
