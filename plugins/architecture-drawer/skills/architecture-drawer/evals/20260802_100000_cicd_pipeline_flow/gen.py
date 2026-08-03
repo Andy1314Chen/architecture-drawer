@@ -3,12 +3,13 @@
 
 The first eval case that is not an architecture diagram. Exercises primitives
 and the documented flowchart role palette that no other case touches:
-  - circle()  as green start/end terminators
+  - circle()  as green start/end terminators + gray junction merge points
   - decision()  as yellow branch diamonds (zero usages elsewhere in evals/)
   - hexagon()  as orange I/O (parallelogram substitute)
   - rect()     as blue process steps
   - rect() + inset rect() as purple double-border subprocess
-Branches merge onto a single failure terminator so every edge is well-formed.
+Four quality-gate decisions branch "No" to a shared failure column that
+converges via junction merge points on a single Failed terminator.
 """
 import os
 import sys
@@ -27,7 +28,7 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent
 NAME = "cicd_pipeline_flow"
 
-W, H = 1000, 1240
+W, H = 1000, 1720
 CX = 500                       # center spine x
 BX = 210                       # left failure-column x
 
@@ -37,33 +38,42 @@ BLU_F, BLU_S = "#DAE8FC", "#6C8EBF"   # process
 YEL_F, YEL_S = "#FFF2CC", "#D6B656"   # decision
 ORG_F, ORG_S = "#FFE6CC", "#D79B00"   # I/O (hexagon)
 PUR_F, PUR_S = "#E1D5E7", "#9673A6"   # subprocess (double border)
+JCT_F, JCT_S = "#B0B0B0", "#666666"   # junction merge point (neutral gray)
 EDGE = "#4D4D4D"                      # all edges gray
 INK = "#1A1A1A"
 SUB = "#555555"
 
-F = [20, 14, 12, 10]          # title / label / sub / branch flag (>=1.15x apart)
+F = [20, 14, 12, 10]          # title / node-label / subtitle / sub-label
 BB = False                    # text stays out of the collision registry
 
 d = SVGDrawer(W, H, bg="#FFFFFF")
 d.arrow_head("ah", EDGE)
 
 # --- title ----------------------------------------------------------------
-d.text(CX, 44, "CI/CD 部署流水线  ·  Deployment Pipeline", font_size=F[0],
-       weight="bold", fill=INK, anchor="middle", bbox=BB)
+d.text(CX, 42, "CI/CD 部署流水线", font_size=F[0], weight="bold",
+       fill=INK, anchor="middle", bbox=BB)
+d.text(CX, 68, "Continuous Integration & Continuous Deployment Pipeline",
+       font_size=F[2], fill=SUB, anchor="middle", bbox=BB)
 
 # --- geometry helpers -----------------------------------------------------
 # decision(x,y,w,h) & rect/hexagon are corner-anchored; circle is centered.
 DW, DH = 170, 84             # decision diamond
-RW, RH = 200, 54             # process rect
+RW, RH = 220, 56             # process rect (wide enough for tool names)
 HW, HH = 240, 56             # I/O hexagon
 RR = 30                      # terminator radius
+JR = 6                       # junction radius
 
 
 def term(cx, cy, nid):
-    """Green terminator circle. Label is placed separately, OFF the circle,
-    so the text-overlap check never flags text sitting on its own shape."""
+    """Green terminator circle. Label is placed separately, OFF the circle."""
     d.circle(cx, cy, RR, fill=GRN_F, stroke=GRN_S, stroke_width=1.8,
              node_id=nid, node_kind="op", bbox=True)
+
+
+def junction(cx, cy, nid):
+    """Small gray merge point on the failure column."""
+    d.circle(cx, cy, JR, fill=JCT_F, stroke=JCT_S, stroke_width=1.2,
+             node_id=nid, node_kind="junction", bbox=True)
 
 
 def io_hex(cx, cy, nid, title, sub=""):
@@ -86,16 +96,16 @@ def proc(cx, cy, nid, title, sub=""):
                bbox=BB)
 
 
-def diamond(cx, cy, nid, label):
+def diamond(cx, cy, nid, label, sub_label):
     d.decision(cx - DW / 2, cy - DH / 2, DW, DH, fill=YEL_F, stroke=YEL_S,
                stroke_width=1.6, node_id=nid, node_kind="op", bbox=True)
     d.text(cx, cy - 6, label, font_size=F[1], weight="bold", fill=INK,
            anchor="middle", bbox=BB)
-    d.text(cx, cy + 14, "decision", font_size=F[3], fill=SUB,
+    d.text(cx, cy + 14, sub_label, font_size=F[3], fill=SUB,
            anchor="middle", bbox=BB)
 
 
-def subprocess(cx, cy, nid, title, sub=""):
+def subprocess_box(cx, cy, nid, title, sub=""):
     """Purple process with an inset second border (double-border subprocess)."""
     d.rect(cx - RW / 2, cy - RH / 2, RW, RH, rx=7, fill=PUR_F, stroke=PUR_S,
            stroke_width=1.4, node_id=nid, node_kind="op", bbox=True)
@@ -122,63 +132,93 @@ def yes_no(start, end, txt):
                fill=SUB, anchor="middle", bbox=BB)
 
 
-# --- nodes (center spine, then failure column) ---------------------------
-# y-centers spaced ~200px (flowchart layout cheatsheet).
-term(CX, 100, "start")
-io_hex(CX, 200, "hook", "Webhook", "push event 触发")
-proc(CX, 300, "build", "构建 Build", "编译 · 单元测试")
-diamond(CX, 410, "build_ok", "构建成功?")
-subprocess(CX, 530, "tests", "测试套件", "unit · integration")
-diamond(CX, 650, "test_ok", "测试通过?")
-proc(CX, 770, "deploy", "部署到生产", "Deploy to Prod")
-term(CX, 880, "released")
+# --- nodes: center spine -------------------------------------------------
+term(CX, 120, "start")
+io_hex(CX, 235, "hook", "Webhook", "push · PR merge")
+subprocess_box(CX, 355, "checkout", "检出 & 构建", "git clone · npm ci · compile")
+diamond(CX, 480, "build_ok", "构建成功?", "Build OK?")
+subprocess_box(CX, 615, "lint", "代码检查", "ESLint · MyPy · SAST scan")
+diamond(CX, 740, "lint_ok", "检查通过?", "Lint OK?")
+subprocess_box(CX, 875, "tests", "测试套件", "unit · integration · e2e")
+diamond(CX, 1000, "test_ok", "测试通过?", "Tests Pass?")
+proc(CX, 1135, "staging", "部署预发布", "Deploy Staging · kubectl rolling")
+proc(CX, 1255, "smoke", "冒烟测试", "Smoke Test · health · contract")
+diamond(CX, 1380, "smoke_ok", "冒烟通过?", "Smoke OK?")
+proc(CX, 1515, "deploy", "部署生产", "Deploy Prod · canary → blue-green")
+term(CX, 1635, "released")
 
-# failure column (left): one notify process + one shared failure terminator.
-proc(BX, 410, "notify", "通知失败", "Notify Failure")
-term(BX, 650, "failed")
+# --- nodes: failure column -----------------------------------------------
+proc(BX, 480, "notify", "通知失败", "Notify · Slack · Email")
+junction(BX, 740, "m1")
+junction(BX, 1000, "m2")
+term(BX, 1380, "failed")
 
-# terminator labels — placed OFF the circles (right of spine / left of column)
-# so the text-overlap check never flags label-on-own-shape.
-d.text(CX + 46, 104, "开始", font_size=F[1], weight="bold", fill=INK,
+# --- terminator labels (off-circle) --------------------------------------
+d.text(CX + 46, 124, "开始", font_size=F[1], weight="bold", fill=INK,
        anchor="middle", bbox=BB)
-d.text(CX + 50, 884, "已发布", font_size=F[1], weight="bold", fill=INK,
+d.text(CX + 50, 1639, "已发布", font_size=F[1], weight="bold", fill=INK,
        anchor="middle", bbox=BB)
-d.text(BX - 46, 654, "失败", font_size=F[1], weight="bold", fill=INK,
+d.text(BX - 46, 1384, "失败", font_size=F[1], weight="bold", fill=INK,
        anchor="middle", bbox=BB)
 
-# --- edges (all gray, snapped to node borders) ---------------------------
+# --- edges: spine (down) -------------------------------------------------
 d.connect("start", "bottom", "hook", "top", stroke=EDGE,
           stroke_width=1.8, marker_end="ah")
-d.connect("hook", "bottom", "build", "top", stroke=EDGE,
+d.connect("hook", "bottom", "checkout", "top", stroke=EDGE,
           stroke_width=1.8, marker_end="ah")
-d.connect("build", "bottom", "build_ok", "top", stroke=EDGE,
-          stroke_width=1.8, marker_end="ah")
-
-# Build OK? -> No (left) -> notify -> down -> failed
-b_no = d.connect("build_ok", "left", "notify", "right", stroke=EDGE,
-                 stroke_width=1.8, marker_end="ah")
-yes_no(b_no[0], b_no[1], "否 No")
-d.connect("notify", "bottom", "failed", "top", stroke=EDGE,
+d.connect("checkout", "bottom", "build_ok", "top", stroke=EDGE,
           stroke_width=1.8, marker_end="ah")
 
-# Build OK? -> Yes (down) -> tests
-b_yes = d.connect("build_ok", "bottom", "tests", "top", stroke=EDGE,
-                  stroke_width=1.8, marker_end="ah")
-yes_no(b_yes[0], b_yes[1], "是 Yes")
+e = d.connect("build_ok", "bottom", "lint", "top", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "是 Yes")
+d.connect("lint", "bottom", "lint_ok", "top", stroke=EDGE,
+          stroke_width=1.8, marker_end="ah")
+
+e = d.connect("lint_ok", "bottom", "tests", "top", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "是 Yes")
 d.connect("tests", "bottom", "test_ok", "top", stroke=EDGE,
           stroke_width=1.8, marker_end="ah")
 
-# Tests Pass? -> No (left, straight) -> failed (convergence)
-t_no = d.connect("test_ok", "left", "failed", "right", stroke=EDGE,
-                 stroke_width=1.8, marker_end="ah", dashed="6,4")
-yes_no(t_no[0], t_no[1], "否 No")
+e = d.connect("test_ok", "bottom", "staging", "top", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "是 Yes")
+d.connect("staging", "bottom", "smoke", "top", stroke=EDGE,
+          stroke_width=1.8, marker_end="ah")
+d.connect("smoke", "bottom", "smoke_ok", "top", stroke=EDGE,
+          stroke_width=1.8, marker_end="ah")
 
-# Tests Pass? -> Yes (down) -> deploy -> released
-t_yes = d.connect("test_ok", "bottom", "deploy", "top", stroke=EDGE,
-                  stroke_width=1.8, marker_end="ah")
-yes_no(t_yes[0], t_yes[1], "是 Yes")
+e = d.connect("smoke_ok", "bottom", "deploy", "top", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "是 Yes")
 d.connect("deploy", "bottom", "released", "top", stroke=EDGE,
           stroke_width=1.8, marker_end="ah")
+
+# --- edges: failure column (convergence via junctions) -------------------
+# D1 No → Notify → (down) → m1;  D2 No → m1 → (down) → m2;
+# D3 No → m2 → (down) → Failed;  D4 No → Failed.
+e = d.connect("build_ok", "left", "notify", "right", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "否 No")
+d.connect("notify", "bottom", "m1", "top", stroke=EDGE,
+          stroke_width=1.8, marker_end="ah")
+
+e = d.connect("lint_ok", "left", "m1", "right", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "否 No")
+d.connect("m1", "bottom", "m2", "top", stroke=EDGE,
+          stroke_width=1.8, marker_end="ah")
+
+e = d.connect("test_ok", "left", "m2", "right", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "否 No")
+d.connect("m2", "bottom", "failed", "top", stroke=EDGE,
+          stroke_width=1.8, marker_end="ah")
+
+e = d.connect("smoke_ok", "left", "failed", "right", stroke=EDGE,
+              stroke_width=1.8, marker_end="ah")
+yes_no(e[0], e[1], "否 No")
 
 # --- score + artifact triplet -------------------------------------------
 svg = d.render()
