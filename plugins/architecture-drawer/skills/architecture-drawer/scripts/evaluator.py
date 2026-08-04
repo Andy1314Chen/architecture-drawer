@@ -584,6 +584,69 @@ def check_spacing(drawer, min_gap=14.0, kinds=("op", "junction")):
                 )
     return issues
 
+
+def _overlap_len(a0, a1, b0, b1):
+    """Length of the overlap of intervals [a0,a1] and [b0,b1]; 0 if disjoint."""
+    return max(0.0, min(a1, b1) - max(a0, b0))
+
+
+def check_alignment(drawer, edge_tol=5.0, center_frac=0.15,
+                    overlap_frac=0.5, size_tol=6.0, kinds=("op",)):
+    """Flag same-kind nodes that read as a row/column yet share no edge.
+
+    Two same-kind visible nodes are "row peers" when their vertical extents
+    overlap strongly (>= overlap_frac of the shorter height) while their
+    horizontal extents do not overlap (side-by-side) — the eye then expects a
+    shared top, bottom, or vertical-center line. "Column peers" mirror this on
+    the other axis. A pair is flagged only when it shares NEITHER an edge
+    (within edge_tol) NOR a center line (within center_frac * the shorter
+    side), which keeps false positives low. Only SAME-SIZED peers (w/h within
+    size_tol) are compared: a row/column of differently-sized components
+    legitimately staggers, and "should align" only applies to peer modules of
+    the same footprint. Encodes the "align to shared edges" layout principle.
+    """
+    issues = []
+    nodes = [n for n in drawer.nodes.values()
+             if n.kind in kinds and getattr(n, "role", "node") == "node" and n.visible]
+    for i in range(len(nodes)):
+        a = nodes[i]
+        ax0, ay0, ax1, ay1 = a.x, a.y, a.x + a.w, a.y + a.h
+        for j in range(i + 1, len(nodes)):
+            b = nodes[j]
+            bx0, by0, bx1, by1 = b.x, b.y, b.x + b.w, b.y + b.h
+            # Only same-sized peers are expected to share an alignment edge;
+            # a row/column of differently-sized components legitimately staggers.
+            if abs(a.w - b.w) > size_tol or abs(a.h - b.h) > size_tol:
+                continue
+            vov = _overlap_len(ay0, ay1, by0, by1)
+            hov = _overlap_len(ax0, ax1, bx0, bx1)
+            # row peers: strong vertical overlap, side by side (no h-overlap)
+            min_h = min(a.h, b.h)
+            if min_h > 0 and vov >= overlap_frac * min_h and hov <= 0:
+                acy, bcy = (ay0 + ay1) * 0.5, (by0 + by1) * 0.5
+                if not (abs(ay0 - by0) <= edge_tol            # top edge
+                        or abs(ay1 - by1) <= edge_tol          # bottom edge
+                        or abs(acy - bcy) <= center_frac * min_h):
+                    issues.append(
+                        f"[alignment] row peers '{a.id}' and '{b.id}' share no "
+                        f"top/bottom/center line (top Δ{abs(ay0-by0):.0f}px, "
+                        f"bottom Δ{abs(ay1-by1):.0f}px)."
+                    )
+                continue
+            # column peers: strong horizontal overlap, stacked (no v-overlap)
+            min_w = min(a.w, b.w)
+            if min_w > 0 and hov >= overlap_frac * min_w and vov <= 0:
+                acx, bcx = (ax0 + ax1) * 0.5, (bx0 + bx1) * 0.5
+                if not (abs(ax0 - bx0) <= edge_tol            # left edge
+                        or abs(ax1 - bx1) <= edge_tol          # right edge
+                        or abs(acx - bcx) <= center_frac * min_w):
+                    issues.append(
+                        f"[alignment] column peers '{a.id}' and '{b.id}' share "
+                        f"no left/right/center line (left Δ{abs(ax0-bx0):.0f}px, "
+                        f"right Δ{abs(ax1-bx1):.0f}px)."
+                    )
+    return issues
+
 def check_phantom_anchors(drawer):
     """Detect invisible nodes used as edge endpoints (phantom anchors).
 
@@ -956,6 +1019,89 @@ def check_palette(drawer, max_colors=8, hard_max=12):
         )
     return issues
 
+
+def _contrast_ratio(fg, bg):
+    """WCAG 2 contrast ratio (>=1.0) between two '#rrggbb' colors."""
+    from svg_utils import relative_luminance
+    lf, lb = relative_luminance(fg), relative_luminance(bg)
+    hi, lo = max(lf, lb), min(lf, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def check_contrast(drawer, normal_ratio=4.5, large_ratio=3.0,
+                   large_px=24.0, large_bold_px=18.5):
+    """WCAG 2 text-on-fill contrast (parses the rendered SVG).
+
+    Pairs each <text> with the fill of the smallest <rect> containing its
+    anchor point, falling back to the canvas background when no rect owns it,
+    and measures the WCAG 2 contrast ratio against the text's own fill.
+    Thresholds track WCAG 2 AA: 4.5:1 for normal text, 3:1 for large text
+    (>=24px, or >=18.5px bold). Only text sitting on a non-neutral (accent)
+    fill is measured: the defect this catches is a label that doesn't read on
+    its colored card. Accent-colored text on a white/neutral canvas (category
+    labels, muted captions) is a typographic choice, not a fill-contrast
+    defect, and is skipped. Stroke-only (fill=none) containers are also
+    skipped so the text is judged against the concrete fill painted behind it.
+    Returns (fail_issues, warn_issues):
+      - FAIL: below the large-text floor (large_ratio) — effectively unreadable;
+      - WARN: large_ratio..normal_ratio — readable but below AA for labels.
+    """
+    from svg_utils import normalize_color, is_neutral
+    fail, warn = [], []
+    svg = drawer.render()
+    W, H = drawer.width, drawer.height
+
+    # rects that actually paint a background (skip fill=none containers)
+    rects = []
+    for attrs in _re.findall(r'<rect ([^>]*)/>', svg):
+        p = dict(_re.findall(r'([\w-]+)="([^"]*)"', attrs))
+        try:
+            rx, ry = float(p['x']), float(p['y'])
+            rw, rh = float(p['width']), float(p['height'])
+        except (KeyError, ValueError):
+            continue
+        fill = normalize_color(p.get('fill', ''))
+        if fill is None:
+            continue
+        rects.append((rx, ry, rw, rh, fill))
+
+    bg = _extract_background(svg, W, H) or getattr(drawer, "background", "#ffffff")
+    bg = normalize_color(bg) or "#ffffff"
+
+    for attrs, content in _re.findall(r'<text ([^>]*)>(.*?)</text>', svg, _re.DOTALL):
+        p = dict(_re.findall(r'([\w-]+)="([^"]*)"', attrs))
+        try:
+            tx, ty = float(p['x']), float(p['y'])
+        except (KeyError, ValueError):
+            continue
+        if not content.strip():
+            continue
+        fg = normalize_color(p.get('fill', 'black'))
+        if fg is None:
+            continue  # gradient/none text color — can't measure
+        fs = float(p.get('font-size', '12'))
+        bold = 'bold' in p.get('font-weight', 'normal')
+        # background = smallest containing rect with a concrete fill, else canvas
+        owners = [r for r in rects if r[0] <= tx <= r[0] + r[2] and r[1] <= ty <= r[1] + r[3]]
+        owner_fill = min(owners, key=lambda r: r[2] * r[3])[4] if owners else bg
+        if owner_fill == fg or is_neutral(owner_fill):
+            continue  # identical fill, or neutral bg (canvas/white card) — the
+                      # text color there is a typographic choice, not a fill defect
+        ratio = _contrast_ratio(fg, owner_fill)
+        threshold = large_ratio if (fs >= large_px or (bold and fs >= large_bold_px)) else normal_ratio
+        snippet = content.strip()[:32]
+        if ratio < large_ratio:
+            fail.append(
+                f"[contrast] '{snippet}' {ratio:.2f}:1 < {large_ratio}:1 "
+                f"(text {fg} on {owner_fill}, {fs:.0f}px)."
+            )
+        elif ratio < threshold:
+            warn.append(
+                f"[contrast] '{snippet}' {ratio:.2f}:1 < {threshold}:1 "
+                f"(text {fg} on {owner_fill}, {fs:.0f}px)."
+            )
+    return fail, warn
+
 def evaluate_svg(drawer, conn_tolerance=12.0):
     report = []
     score = 100
@@ -1119,6 +1265,18 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
             report.append(f"        - {line}")
     else:
         report.append("[PASS] Same-kind node spacing meets minimum gap.")
+    # 6b. Alignment check (same-kind peers share a row/column edge)
+    align_issues = check_alignment(drawer)
+    if align_issues:
+        penalty = min(len(align_issues) * 3, 15)
+        score -= penalty
+        report.append(
+            f"[WARN] {len(align_issues)} misaligned same-kind peer pair(s). Penalty: -{penalty}"
+        )
+        for line in align_issues[:12]:
+            report.append(f"        - {line}")
+    else:
+        report.append("[PASS] Same-kind peers share a row/column alignment edge.")
 
     # 7. Typography scale check
     font_issues = check_font_scale(drawer)
@@ -1151,8 +1309,25 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
         n = len(drawer.accent_colors)
         report.append(f"[PASS] Palette: {n} accent color(s), light background, no luminance clash.")
 
-    # 9. Color Contrast (placeholder)
-    report.append("[INFO] Color contrast check: Manual review recommended for specific accessibility.")
+    # 9. Color contrast (WCAG 2 text-on-fill) — replaces former manual-review placeholder
+    if _re.search(r'<text\b', drawer.render()):
+        c_fail, c_warn = check_contrast(drawer)
+        if c_fail:
+            penalty = min(len(c_fail) * 6, 18)
+            score -= penalty
+            report.append(f"[FAIL] {len(c_fail)} text element(s) below 3:1 contrast. Penalty: -{penalty}")
+            for line in c_fail[:8]:
+                report.append(f"        - {line}")
+        if c_warn:
+            penalty = min(len(c_warn) * 3, 12)
+            score -= penalty
+            report.append(f"[WARN] {len(c_warn)} text element(s) below AA (4.5:1) contrast. Penalty: -{penalty}")
+            for line in c_warn[:8]:
+                report.append(f"        - {line}")
+        if not c_fail and not c_warn:
+            report.append("[PASS] Text meets WCAG AA contrast against its fill.")
+    else:
+        report.append("[INFO] Color contrast: no text in this diagram; check skipped.")
 
     final_score = max(0, score)
     return final_score, report

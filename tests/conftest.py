@@ -28,16 +28,18 @@ GOLDEN = ROOT / "tests" / "golden"
 
 # Per-eval score thresholds. A regression suite locks in *current* quality so
 # it catches degradation; it does not retro-raise the bar on legacy generators
-# written before later-added checks (text-overlap, etc.). Each value is the
-# observed baseline (2026-07-30). Bump a threshold only after intentionally
-# improving that generator; the snapshot test will also flag the SVG change.
+# written before later-added checks (text-overlap, contrast, alignment, etc.).
+# Each value is the observed baseline (re-baselined 2026-08-03 after the
+# contrast + alignment dimensions were added). Bump a threshold only after
+# intentionally improving that generator; the snapshot test will also flag the
+# SVG change.
 SCORE_THRESHOLDS = {
-    "20260728_120000_mlir_pipeline": 76,
-    "20260728_153000_agent_infra_architecture": 90,
+    "20260728_120000_mlir_pipeline": 73,
+    "20260728_153000_agent_infra_architecture": 72,
     "20260728_203836_llm_inference_arch": 84,
-    "20260728_2157_satellite_arch": 100,
+    "20260728_2157_satellite_arch": 85,
     "20260729_llama_cpp_arch": 90,
-    "20260729_pi_agent_architecture": 100,
+    "20260729_pi_agent_architecture": 79,
     "20260730_vllm_arch": 90,
     "20260802_100000_cicd_pipeline_flow": 96,
 }
