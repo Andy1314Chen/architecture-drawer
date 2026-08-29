@@ -3,6 +3,32 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — Step 1 Design Brief + glm-5.3 replay: behaviorally verified
+
+**Feature (user proposal, approach A + 常量落盘):** SKILL.md gains "Step 1 —
+Design Brief (开工前完整设计)" between intent judgment and the
+generate-evaluate-correct loop: before any code, a five-section proposal
+derived from input.md + the design system — layout skeleton as relative
+formulas, ONE S1–S4 preset with a role→tint/stroke mapping table, concrete
+font tiers, edge-routing rules, risk checklist — and a landing rule that the
+brief's tokens must sit as a constants block atop gen.py (code = the brief's
+executable form). Interactive sessions may seek a veto; headless prints and
+proceeds. Rationale: coarse specs moved all design ownership to the skill;
+agents were making those decisions ad hoc mid-code.
+
+**Model switch:** maintainer directive — replay model glm-4.7 → glm-5.3
+(both verified `pi -p --provider zai --model …` → PONG).
+
+**Verification (vllm replay, zai/glm-5.3, --agent-keep):** PASSED in 1917s —
+score 100 (0 FAIL / 0 WARN), semantic QA 100/clean, and BOTH new behaviors
+visible in the artifact: (1) gen.py carries the five-section Design Brief
+landed as the "# --- Design Brief tokens (Step 1) ---" constants block
+(canvas 1300×980, band/pitch formulas, S2 Categorical role→hue table, tiers
+20/14/12/10); (2) the diagram is properly colored — 3 chromatic tint families
+matching the declared palette exactly (#E1F2FB sky / #D1EEE6 green /
+#FAEED1 orange), vs the glm-4.7 era's slate-only colorless output. The
+palette floor + de-coloring ban changed agent behavior as intended.
+
 ## 2026-08-29 — 无配色 defect: chromatic palette floor (evaluator ⑯)
 
 **Defect (user-reported on the pilot artifact):** the coarse-spec replay's
