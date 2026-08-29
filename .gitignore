@@ -22,3 +22,6 @@ examples/**/*.png
 # Scratch output for ad-hoc diagram runs (not an evals/ case, so not under
 # test). Move a diagram into evals/<name>/ with a gen.py to make it tracked.
 output/
+
+# Local experiment notes (kept on disk, never pushed).
+experiments/
