@@ -3,6 +3,32 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — gray-dominance fix behaviorally verified (agent_infra rerun)
+
+**User feedback on the agent_infra replay artifact:** multiple colors present
+but the diagram reads gray-family overall — every band/container/card
+neutral, chromatic color confined to a few small chips (11% of business
+elements, 2.3% of painted area). The 无配色 floor only catches zero-color;
+marginal color passed it trivially.
+
+**Fix (d4ca483):** `check_palette` gains a two-axis coverage measure
+(`_chromatic_shares`) — element share (node-style schemes) and painted-area
+share (band-style schemes); FAIL when BOTH < 35%/15%. One strong axis is
+always legitimate — that is what separates the defect from goldens like
+mlir (67%/79% after role-exclusion... element-strong) and agent_infra's own
+golden (12% elem but 32% area). Calibrated on all 16 diagrams: only the
+reported artifact fires. SKILL.md Brief §2 + design rules now state "color
+must own the structure" (tint bands or color primary nodes — chips don't
+count).
+
+**Verification (agent_infra rerun, zai/glm-5.3):** PASSED 1157s — score 100,
+0 FAIL / 0 WARN, semantic QA 100/clean, no gray flag. Chromatic coverage went
+**2.3% → 31% of painted area** (element 11%→13%): the agent now tints the
+five layer bands + accent modules with a five-hue pastel scheme
+(#DBEAFE/#DCFCE7/#EDE9FE/#FEE2E2/#FFEDD5) instead of the gray skeleton with
+two chips. Palette tokens live in the Design-Brief constants block. Also
+cleaned a stale sandbox left by the cancelled bg_11 run.
+
 ## 2026-08-29 — full 8-case agent replay (zai/glm-5.3, coarse specs): 8/8 PASS
 
 **Run:** all 8 evals in parallel as separate `--agent-eval` processes
