@@ -1,0 +1,32 @@
+{
+  "scheme": "S1",
+  "layout": "band",
+  "flow": "top-down",
+  "flow_chain": [
+    "api_server",
+    "llm_engine",
+    "exec_layer"
+  ],
+  "palette_role": {
+    "api_server": {
+      "fill": "#e8eef3",
+      "stroke": "#1b3a5c"
+    },
+    "llm_engine": {
+      "fill": "#d5e1eb",
+      "stroke": "#1b3a5c"
+    },
+    "kv_cache": {
+      "fill": "#e8eef3",
+      "stroke": "#1b3a5c"
+    },
+    "exec_layer": {
+      "fill": "#b8cde0",
+      "stroke": "#1b3a5c"
+    },
+    "optimizations": {
+      "fill": "#e8eef3",
+      "stroke": "#1b3a5c"
+    }
+  }
+}

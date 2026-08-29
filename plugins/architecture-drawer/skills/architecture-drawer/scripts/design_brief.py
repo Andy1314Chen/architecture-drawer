@@ -16,16 +16,18 @@ Schema rules (inconsistent states are unconstructible):
   - ``palette_role`` is the SINGLE source of declared identity: its keys are
     the data-node-id values the checker looks for in the SVG.  Key semantics
     are bound to ``layout``: band -> layer-container ids, node -> primary
-    node ids.  There is no separate ``layers`` field to drift out of sync.
-  - ``layers`` is DERIVED: chromatic-fill keys of palette_role in insertion
-    order (first -> last along the flow axis).
+    node ids.  There is no separate container list to drift out of sync.
+  - ``flow_chain`` is the ordered pipeline chain (a SUBSET of palette keys —
+    validated at construction).  Side bands (memory/cache columns) and
+    text-only bands are palette members but not chain stages; membership is
+    not derivable from paint, so it is declared explicitly.
   - tint/plain membership is DERIVED from ``ColorSpec.fill`` (white == plain).
   - All colors are normalized to lowercase #rrggbb ("white" -> "#ffffff") so
     hex case/alias never produces noise failures.
 """
 import json
 from dataclasses import dataclass, field
-from typing import Dict, Mapping, Tuple
+from typing import Mapping, Tuple
 
 _WHITE = {"white", "#fff", "#ffffff"}
 _LAYOUTS = ("band", "node")
@@ -75,6 +77,9 @@ class DesignBrief:
     flow: str = "top-down"        # top-down | left-right | none (no dominant axis)
     # key = data-node-id (band: layer container; node: primary node)
     palette_role: Mapping[str, ColorSpec] = field(default_factory=dict)
+    # ordered pipeline chain (first -> last along the flow axis): a SUBSET of
+    # palette keys; side bands / text-only bands stay out of the chain.
+    flow_chain: Tuple[str, ...] = ()
 
     def __post_init__(self):
         if self.layout not in _LAYOUTS:
@@ -84,6 +89,10 @@ class DesignBrief:
             raise ValueError(
                 f"flow must be one of {_FLOWS}, got {self.flow!r}")
         object.__setattr__(self, "palette_role", dict(self.palette_role))
+        unknown = [k for k in self.flow_chain if k not in self.palette_role]
+        if unknown:
+            raise ValueError(
+                f"flow_chain keys not declared in palette_role: {unknown}")
 
     # -- derived views (single source of truth: palette_role) ---------------
     @property
@@ -100,9 +109,9 @@ class DesignBrief:
 
     @property
     def layers(self) -> Tuple[str, ...]:
-        """Ordered layer ids (first -> last along the flow axis): the tinted
-        keys in declaration order. Empty for node-style briefs."""
-        return self.tint_keys
+        """Ordered chain stages (first -> last along the flow axis): the
+        declared flow_chain. Empty for node-style briefs / no chain."""
+        return tuple(self.flow_chain)
 
     # -- serialization (brief.json next to the artifact triplet) -----------
     def to_dict(self) -> dict:
@@ -110,6 +119,7 @@ class DesignBrief:
             "scheme": self.scheme,
             "layout": self.layout,
             "flow": self.flow,
+            "flow_chain": list(self.flow_chain),
             "palette_role": {k: {"fill": s.fill, "stroke": s.stroke}
                              for k, s in self.palette_role.items()},
         }
@@ -123,6 +133,7 @@ class DesignBrief:
             scheme=d.get("scheme", "S1"),
             layout=d.get("layout", "band"),
             flow=d.get("flow", "top-down"),
+            flow_chain=tuple(d.get("flow_chain", ())),
             palette_role={k: ColorSpec.from_json(v)
                           for k, v in d.get("palette_role", {}).items()},
         )

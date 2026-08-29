@@ -1030,33 +1030,34 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
         role = rect_roles[i] if i < len(rect_roles) else ""
         if role == "layer":
             role_layers.append((nid, r))
-        if brief.layout == "band" and nid and nid in brief.layers:
+        if brief.layout == "band" and nid and nid in brief.palette_role:
             cur = layer_boxes.get(nid)
             if cur is None or r.w * r.h < cur.w * cur.h:
                 layer_boxes[nid] = r
     if brief.layout == "band":
         for nid, r in role_layers:
-            if not nid or nid not in brief.layers:
+            if not nid or nid not in brief.palette_role:
                 errs.append(Issue(
                     "warn", "brief-layer-undeclared",
                     f"layer container at ({r.x:.0f},{r.y:.0f}, {r.w:.0f}x"
                     f"{r.h:.0f}) is not declared in the brief palette."))
-        declared_set = set(brief.layers)
-        for k in brief.layers:
-            box = layer_boxes.get(k)
-            if box is None:
-                continue          # already FAILed by A (shape missing)
-            # business-node predicate: not decoration/legend/background, not
-            # itself a declared layer container
+        declared_set = set(brief.palette_role)
+        for k, box in layer_boxes.items():
+            # business content predicate: not decoration/legend/background,
+            # not itself a declared container; text bullets count as content
+            # (a text-only optimizations band is legitimately non-empty)
             n = sum(
                 1 for i, r in enumerate(rects)
                 if business(i) and rect_ids[i] not in declared_set
                 and _contains(box, r.x + r.w / 2, r.y + r.h / 2))
+            n += sum(
+                1 for t in doc["texts"]
+                if _contains(box, t[0].x + t[0].w / 2, t[0].y + t[0].h / 2))
             if n == 0:
                 errs.append(Issue(
                     "fail", "brief-layer-empty",
                     f"declared layer '{k}' renders empty — no business node "
-                    f"inside its container."))
+                    f"or label inside its container."))
     else:  # node style
         for nid, r in role_layers:
             errs.append(Issue(
@@ -1067,8 +1068,8 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
     # --- C: flow contract (skipped without a structural basis) --------------
     if brief.flow == "none":
         return
-    if brief.layout == "band" and not layer_boxes:
-        return          # short-circuit: B's basis is gone; C would be noise
+    if brief.layout == "band" and not brief.layers:
+        return          # short-circuit: no chain declared; C would be noise
     edges = [(p1, p2) for p1, p2, role in doc["edge_specs"]
              if role not in _NON_BUSINESS]
 

@@ -22,6 +22,8 @@ if _SKILL not in sys.path:
 from svg_utils import SVGDrawer, save_svg, rasterize_svg  # noqa: E402
 from evaluator import evaluate_svg  # noqa: E402
 from svg2pptx import svg_to_pptx, PptxConfig  # noqa: E402
+from design_brief import DesignBrief, ColorSpec  # noqa: E402
+from semantic_qa import run_semantic_qa  # noqa: E402
 
 OUT = Path(__file__).resolve().parent
 NAME = "vllm_arch"
@@ -45,9 +47,9 @@ def node(x, y, w, h, nid, fill="white", stroke=DARK, sw=1.5, rx=6, role=None,
            stroke_width=sw, node_id=nid, bbox=bbox, role=role)
 
 
-def layer(x, y, w, h, fill, role="layer"):
+def layer(x, y, w, h, fill, role="layer", nid=None):
     d.rect(x, y, w, h, rx=8, ry=8, fill=fill, stroke=DARK, stroke_width=1.5,
-           bbox=True, role=role)
+           bbox=True, role=role, node_id=nid)
 
 
 def txt(x, y, s, fs=12, fill=INK, weight="normal", anchor="middle", bbox=True):
@@ -82,7 +84,7 @@ txt(620, 122, "OpenAI API · HTTP / SDK", fs=12, fill=MUTE)
 # ---------------------------------------------------------------------------
 # 3. API Server layer
 # ---------------------------------------------------------------------------
-layer(150, 166, 940, 128, T2)
+layer(150, 166, 940, 128, T2, nid="api_server")
 txt(168, 190, "API Server", fs=14, weight="bold", anchor="start")
 node(210, 214, 360, 60, "fastapi")
 txt(390, 234, "FastAPI / ASGI Server", fs=14, weight="bold")
@@ -94,7 +96,7 @@ txt(860, 254, "/v1/completions · /v1/chat/completions", fs=12, fill=MUTE)
 # ---------------------------------------------------------------------------
 # 4. LLM Engine (Core) layer
 # ---------------------------------------------------------------------------
-layer(40, 318, 740, 300, T1)
+layer(40, 318, 740, 300, T1, nid="llm_engine")
 txt(58, 340, "LLM Engine (Core)", fs=14, weight="bold", anchor="start")
 node(270, 360, 280, 46, "async_engine")
 txt(410, 383, "AsyncLLMEngine", fs=14, weight="bold")
@@ -118,7 +120,7 @@ bullets(448, 482, [
 # ---------------------------------------------------------------------------
 # 5. Paged KV Cache layer (right)
 # ---------------------------------------------------------------------------
-layer(800, 318, 400, 300, T2)
+layer(800, 318, 400, 300, T2, nid="kv_cache")
 txt(818, 340, "Paged KV Cache (GPU Memory)", fs=14, weight="bold", anchor="start")
 
 # ① logical blocks (decoration)
@@ -153,7 +155,7 @@ txt(1000, 582, "allocated blocks need not be contiguous → low fragmentation",
 # ---------------------------------------------------------------------------
 # 6. Execution layer (GPU workers)
 # ---------------------------------------------------------------------------
-layer(40, 664, 1160, 236, T3)
+layer(40, 664, 1160, 236, T3, nid="exec_layer")
 txt(58, 686, "Execution Layer", fs=14, weight="bold", anchor="start")
 node(90, 708, 240, 58, "worker")
 txt(210, 730, "Worker", fs=14, weight="bold")
@@ -166,7 +168,7 @@ txt(840, 730, "PagedAttention Kernel", fs=14, weight="bold")
 txt(840, 750, "blocked KV · flash attn", fs=12, fill=MUTE)
 
 d.rect(90, 786, 1090, 94, rx=6, ry=6, fill=T2, stroke=DARK, stroke_width=1.5,
-       bbox=True, role="layer")
+       bbox=True, role="layer", node_id="optimizations")
 txt(110, 808, "Optimizations & CUDA Kernels", fs=14, weight="bold", anchor="start")
 bullets(110, 832, [
     "• Continuous batching (iteration-level)    • Prefix caching    • Chunked prefill    • Speculative decoding",
@@ -199,11 +201,33 @@ d.line(300, 936, 340, 936, stroke=DARK, stroke_width=1.5, role="legend",
 txt(352, 936, "cache / block management", fs=12, anchor="start", bbox=False)
 
 # ---------------------------------------------------------------------------
-# 9. Evaluate + emit triplet
+# 9. Design Brief (Step 1) — declared from input.md's layer list; the
+#    contract the rendered SVG is asserted against. kv_cache is a SIDE band
+#    (memory column) and optimizations a text-only band: palette members,
+#    not chain stages. The chain is input.md's request flow.
 # ---------------------------------------------------------------------------
+BRIEF = DesignBrief(
+    scheme="S1",
+    layout="band",
+    flow="top-down",
+    palette_role={
+        "api_server":    ColorSpec(T2, DARK),
+        "llm_engine":    ColorSpec(T1, DARK),
+        "kv_cache":      ColorSpec(T2, DARK),
+        "exec_layer":    ColorSpec(T3, DARK),
+        "optimizations": ColorSpec(T2, DARK),
+    },
+    flow_chain=("api_server", "llm_engine", "exec_layer"),
+)
+
 score, report = evaluate_svg(d)
 print("Quality Score: %d" % score)
 for line in report:
+    print(line)
+
+qa = run_semantic_qa(d, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
     print(line)
 
 svg = d.render()
@@ -211,4 +235,5 @@ save_svg(svg, str(OUT / (NAME + ".svg")))
 rasterize_svg(str(OUT / (NAME + ".svg")), str(OUT / (NAME + ".png")), width=W)
 svg_to_pptx(svg, str(OUT / (NAME + ".pptx")),
             config=PptxConfig(slide_w=13.333, slide_h=10.41, scale=1.0))
+BRIEF.write(str(OUT / "brief.json"))
 print("DONE")
