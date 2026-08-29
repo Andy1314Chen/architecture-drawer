@@ -331,6 +331,12 @@ def _walk(el, m, out):
                     out["segments"].extend(
                         (a_, b_, prole, psw)
                         for a_, b_ in zip(abspts, abspts[1:]))
+                    # whole-edge spec (first->last point) for flow checks:
+                    # an orthogonal/curved edge must count as ONE edge, not
+                    # per-sub-segment (sub-segment attribution loses L-edges
+                    # whose middle jog lands between bands).
+                    if a.get("fill", "none") in (None, "", "none"):
+                        out["edge_specs"].append((abspts[0], abspts[-1], prole))
             return
         # full-canvas / background-role shapes are never node hosts
         if role == "background":
@@ -342,6 +348,9 @@ def _walk(el, m, out):
             return
         out["rects"].append(_abs_bbox(lb, m))
         out["rect_roles"].append(role)
+        # identity + paint for the design-brief contract check (A/B/C)
+        out["rect_ids"].append(a.get("data-node-id", ""))
+        out["rect_paints"].append((a.get("fill", ""), a.get("stroke", "")))
         if tag == "circle":
             out["circles"].append(_abs_bbox(lb, m))
     elif tag == "text":
@@ -363,6 +372,7 @@ def _walk(el, m, out):
             p1, p2 = transform_point(m, (x1, y1)), transform_point(m, (x2, y2))
             out["segments"].append((p1, p2, a.get("data-graph-role", ""),
                                      _f(a.get("stroke-width"), 1.0)))
+            out["edge_specs"].append((p1, p2, a.get("data-graph-role", "")))
     # recurse into any remaining container (g/defs/a/switch/...)
     if len(el):
         t = a.get("transform")
@@ -375,21 +385,25 @@ def _collect(svg: str):
     """Parse the rendered SVG into semantic structures (absolute coords).
 
     Returns a dict: markers / rects / circles / segments / line_refs / texts /
-    canvas. rects covers every node-shape kind (rect / polygon / circle /
-    ellipse / filled path) with group transforms applied — decision diamonds
-    and cloud/database paths are label hosts exactly like rects; circles are
-    ALSO listed separately (junction dots legitimately carry adjacent labels).
-    segments holds absolute line endpoints for the edge-annotation exemption.
+    canvas / rect_ids / rect_paints / edge_specs. rects covers every
+    node-shape kind (rect / polygon / circle / ellipse / filled path) with
+    group transforms applied — decision diamonds and cloud/database paths are
+    label hosts exactly like rects; circles are ALSO listed separately
+    (junction dots legitimately carry adjacent labels). segments holds
+    absolute line endpoints for the edge-annotation exemption. rect_ids /
+    rect_paints align 1:1 with rects (data-node-id + raw fill/stroke) for the
+    design-brief contract check; edge_specs holds whole edges (first->last
+    point) so orthogonal/curved connectors count as ONE edge in flow checks.
     """
+    empty = {"markers": set(), "rects": [], "rect_roles": [], "circles": [],
+             "segments": [], "line_refs": [], "texts": [],
+             "rect_ids": [], "rect_paints": [], "edge_specs": [],
+             "canvas": (0.0, 0.0)}
     try:
         root = _ET.fromstring(svg)
     except _ET.ParseError:
-        return {"markers": set(), "rects": [], "rect_roles": [], "circles": [],
-                "segments": [], "line_refs": [], "texts": [],
-                "canvas": (0.0, 0.0)}
-    out = {"markers": set(), "rects": [], "rect_roles": [], "circles": [],
-           "segments": [], "line_refs": [], "texts": [],
-           "canvas": (0.0, 0.0)}
+        return empty
+    out = dict(empty)
     w = _f(root.get("width"))
     h = _f(root.get("height"))
     if w and h:
@@ -400,11 +414,13 @@ def _collect(svg: str):
     return out
 
 
-def _dedup_rects(rects, rect_roles=None, eps=0.5):
+def _dedup_rects(rects, rect_roles=None, eps=0.5, aligned=None):
     """Collapse rects that describe the *same* box (identical geometry) so a
-    card + its own text-frame aren't double-counted. When rect_roles is
-    given it is filtered in lockstep so indices stay aligned."""
-    out, out_roles = [], []
+    card + its own text-frame aren't double-counted. rect_roles and any
+    aligned list given in ``aligned`` (name -> list, 1:1 with rects, e.g.
+    rect_ids / rect_paints) are filtered in lockstep so indices stay
+    aligned."""
+    out, out_roles, out_aligned = [], [], {k: [] for k in (aligned or {})}
     order = sorted(range(len(rects)),
                    key=lambda i: (rects[i].w * rects[i].h, rects[i].x, rects[i].y),
                    reverse=True)
@@ -419,6 +435,10 @@ def _dedup_rects(rects, rect_roles=None, eps=0.5):
             out.append(b)
             if rect_roles is not None:
                 out_roles.append(rect_roles[orig] if orig < len(rect_roles) else "")
+            for k, seq in (aligned or {}).items():
+                out_aligned[k].append(seq[orig] if orig < len(seq) else None)
+    if aligned is not None:
+        return out, out_roles, out_aligned
     if rect_roles is not None:
         return out, out_roles
     return out
