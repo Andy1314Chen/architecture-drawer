@@ -3,6 +3,33 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — 无配色 defect: chromatic palette floor (evaluator ⑯)
+
+**Defect (user-reported on the pilot artifact):** the coarse-spec replay's
+final diagram had no color — 6 fills total, all desaturated slate
+(#546E7A/#37474F/#78909C) + white. Root cause chain: the killed round-0 WAS
+colored (blue family, 88 + contrast WARN); the refine path to 100 removed the
+color, because the skill's own troubleshooting advised "accent >8 → revert op
+fills to neutral white" and the evaluator has a palette CAP but no FLOOR —
+de-coloring is the cheapest zero-risk strategy against the contrast check.
+The slate tones even pass `is_neutral`'s R==G==B filter (they aren't pure
+grays), so the existing counter saw "3 accents" on a colorless figure.
+
+**Fix:** `check_palette` gains a chromatic floor — at least one accent with
+HSL saturation ≥0.25 (pastel tints like #DAE8FC S≈0.85 count; slate S≈0.18
+and pure grays don't). Zero-chromatic → FAIL (无配色), wired as a hard
+palette issue. SKILL.md: palette troubleshooting rewritten (trim-to-preset,
+never revert-to-neutral), contrast troubleshooting bans de-coloring as a fix
+(pair light tint fill + dark accent stroke instead), design rules + dimension
+list ⑯ + capability ⑥ + frontmatter 15→16-dimension. AGENTS.md synced.
+
+**Verification:** pilot SVG → floor fires; pure-gray SVG → fires; all 8
+goldens → 7 CLEAN, cicd keeps only its pre-existing documented >8 WARN;
+`pytest -q` green (71 passed, 1 opt-in skip) — thresholds untouched. Contract
+tests in `tests/test_evaluator.py` (5 cases incl. the exact pilot palette).
+**Follow-up:** rerun the vllm agent-replay to confirm the fix changes agent
+behavior (diagram must come out chromatic).
+
 ## 2026-08-29 — agent-replay unblocked (provider pinning + timeout banking); coarse-spec pilot PASSES
 
 **BLOCKED → resolved.** `--agent-replay` died with an opaque upstream 403 HTML

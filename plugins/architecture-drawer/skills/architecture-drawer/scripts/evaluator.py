@@ -957,7 +957,31 @@ def check_font_scale(drawer, max_sizes=4, min_step=1.15):
             f"[font] near-duplicate font sizes: {'; '.join(near_dup)}. Merge "
             f"them (adjacent sizes should differ by >= {min_step}x)."
         )
-    return issues
+
+
+def _is_chromatic(color):
+    """True when a color carries a usable hue (HSL saturation >= 0.25).
+
+    Desaturated blue-grays (slate tones like #546E7A, S≈0.18) pass
+    ``is_neutral``'s R==G==B filter yet read as colorless; pastel tints
+    (#DAE8FC, S≈0.85) read as colored despite their lightness. The palette
+    floor below keys on this distinction, not on the neutral filter.
+    """
+    h = color.lstrip('#')
+    if len(h) == 3:
+        h = ''.join(ch * 2 for ch in h)
+    if len(h) != 6:
+        return False
+    try:
+        r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    except ValueError:
+        return False
+    mx, mn = max(r, g, b), min(r, g, b)
+    l = (mx + mn) / 2.0
+    if mx == mn:
+        return False                       # pure gray
+    s = (mx - mn) / (2 - 2 * l) if l > 0.5 else (mx - mn) / (2 * l)
+    return s >= 0.25
 
 
 def check_palette(drawer, max_colors=8, hard_max=12):
@@ -990,6 +1014,23 @@ def check_palette(drawer, max_colors=8, hard_max=12):
         issues.append(
             f"[palette] {len(accents)} accent colors used ({accents}); recommend "
             f"<= {max_colors} for a coherent look."
+        )
+
+    # Chromatic floor (无配色): at least one accent must carry a real hue.
+    # The observed end-state of "fix contrast by de-coloring" is a diagram
+    # whose only accents are desaturated slate tones (#546E7A et al.) or none
+    # at all — technically not neutral, visually colorless. That is a defect,
+    # not a safe palette: the cap above is meaningless without a floor.
+    chroma = [c for c in accents if _is_chromatic(c)]
+    if not chroma:
+        shown = sorted(accents) if accents else ["(none)"]
+        issues.append(
+            f"[palette] no chromatic accent color (无配色): accents {shown} "
+            f"carry no readable hue - the diagram is effectively colorless. "
+            f"Pick a preset scheme from references/design_specs.md "
+            f"(S1-S4) and put color into tinted layer fills + accent strokes. "
+            f"Do NOT fix text contrast by de-coloring: pair a light tint fill "
+            f"with its dark accent stroke instead (clears WCAG AA)."
         )
 
     # Extreme luminance clash, compared WITHIN each channel (fill vs fill,
@@ -1298,7 +1339,8 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
     # 8. Color palette check
     palette_issues = check_palette(drawer)
     if palette_issues:
-        hard = any("hard cap" in s for s in palette_issues)
+        hard = any(("hard cap" in s) or ("no chromatic accent" in s)
+                   for s in palette_issues)
         penalty = min(len(palette_issues) * 4, 8 if hard else 4)
         score -= penalty
         tag = "FAIL" if hard else "WARN"
@@ -1306,8 +1348,9 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
         for line in palette_issues:
             report.append(f"        - {line}")
     else:
-        n = len(drawer.accent_colors)
-        report.append(f"[PASS] Palette: {n} accent color(s), light background, no luminance clash.")
+        n_chroma = sum(1 for c in drawer.accent_colors if _is_chromatic(c))
+        report.append(f"[PASS] Palette: {len(drawer.accent_colors)} accent color(s) "
+                      f"({n_chroma} chromatic), light background, no luminance clash.")
 
     # 9. Color contrast (WCAG 2 text-on-fill) — replaces former manual-review placeholder
     if _re.search(r'<text\b', drawer.render()):

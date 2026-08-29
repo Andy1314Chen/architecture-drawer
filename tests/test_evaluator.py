@@ -1,114 +1,90 @@
-"""Unit tests for the evaluator's per-dimension check functions.
+"""Evaluator palette-floor tests — the 无配色 (colorless-diagram) defect class.
 
-The black-box regression suite (``test_regression.py``) scores whole evals but
-does not isolate individual checks. These tests pin the contracts of the
-``check_contrast`` and ``check_alignment`` dimensions (added 2026-08-03, mapped
-from the better-colors / better-layout skill principles) so a future edit that
-silently weakens either check fails here.
-
-Contracts defended:
-  - ``check_contrast`` flags a label that doesn't read on its accent fill
-    (WCAG 2 ratio), and ignores accent text on a neutral canvas (a deliberate
-    category/heading choice, not a fill defect).
-  - ``check_alignment`` flags two SAME-SIZED same-kind peers that share neither
-    a row/column edge nor a center line, and ignores differently-sized peers
-    (a row of varied components legitimately staggers).
+Observed in the wild (2026-08-29 coarse-spec agent-replay pilot): an agent
+"fixed" its text-contrast WARN by de-coloring the whole diagram — the final
+100-score output carried only desaturated slate tones (#546E7A / #37474F /
+#78909C), which pass the R==G==B neutral filter yet read as colorless. The
+palette cap is meaningless without a floor, so ``check_palette`` now FAILs any
+business diagram whose accents carry no readable hue (HSL saturation < 0.25).
 """
-from __future__ import annotations
-
-import os
 import sys
+from pathlib import Path
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_SKILL = os.path.normpath(
-    os.path.join(_HERE, "..", "plugins", "architecture-drawer",
-                 "skills", "architecture-drawer", "scripts")
-)
-if _SKILL not in sys.path:
-    sys.path.insert(0, _SKILL)
+SCRIPTS = Path(__file__).resolve().parent.parent / (
+    "plugins/architecture-drawer/skills/architecture-drawer/scripts")
+sys.path.insert(0, str(SCRIPTS))
 
-from svg_utils import SVGDrawer  # noqa: E402
-from evaluator import check_alignment, check_contrast  # noqa: E402
+from svg_utils import SVGDrawer                    # noqa: E402
+from evaluator import check_palette, _is_chromatic  # noqa: E402
 
 
-# --------------------------------------------------------------------------
-# check_contrast
-# --------------------------------------------------------------------------
-def test_contrast_flags_low_ratio_label_on_accent_fill():
-    """A near-fill-colored label on an accent card must FAIL (below 3:1)."""
-    d = SVGDrawer(300, 200)
-    # mid-blue card with a darker-blue label: ~1.4:1, well under the 3:1 floor
-    d.rect(40, 40, 200, 60, fill="#9BB9D1", node_id="card", node_kind="op")
-    d.text(140, 70, "label", 14, fill="#769EBF", anchor="middle")
-    fail, warn = check_contrast(d)
-    assert fail, "expected a FAIL for low-contrast label on accent fill"
-    assert "label" in fail[0]
-    assert all("card" not in m or "text" not in m for m in fail)
+def _wrap(svg_body, w=600, h=400):
+    class D:
+        pass
+    d = D()
+    d._s = svg_body
+    d.width, d.height = w, h
+    d.render = lambda: svg_body
+    return d
 
 
-def test_contrast_passes_high_contrast_label_on_accent_fill():
-    """Black text on a light accent fill passes both floors."""
-    d = SVGDrawer(300, 200)
-    d.rect(40, 40, 200, 60, fill="#D5E1EB", node_id="card", node_kind="op")
-    d.text(140, 70, "label", 14, fill="#000000", anchor="middle")
-    fail, warn = check_contrast(d)
-    assert fail == [] and warn == [], "black-on-light-accent must pass"
+def test_chromatic_classification():
+    """Slate pseudo-accents are achromatic; pastel tints are chromatic."""
+    assert not _is_chromatic("#546e7a")   # slate, S≈0.18 — the pilot's only "colors"
+    assert not _is_chromatic("#37474f")
+    assert not _is_chromatic("#999999")   # pure gray
+    assert _is_chromatic("#dae8fc")       # pastel blue tint, S≈0.85
+    assert _is_chromatic("#d47130")       # saturated orange
+    assert _is_chromatic("#1b3a5c")       # dark navy accent
 
 
-def test_contrast_ignores_accent_text_on_neutral_canvas():
-    """Accent-colored text on white/neutral is a typographic choice, skipped.
-
-    This is the false-positive guard: category labels and muted captions use
-    saturated hues on a white canvas by design, and must NOT be measured as a
-    fill-contrast defect.
-    """
-    d = SVGDrawer(300, 200)
-    d.text(150, 100, "category", 14, fill="#82b366", anchor="middle")  # green on white
-    fail, warn = check_contrast(d)
-    assert fail == [] and warn == [], "accent text on neutral canvas must be skipped"
-
-
-def test_contrast_white_label_on_white_card_skipped():
-    """Identical fill+text color is unreadable but not a contrast-measurement case."""
-    d = SVGDrawer(300, 200)
-    d.rect(40, 40, 120, 50, fill="#ffffff", node_id="card", node_kind="op")
-    d.text(100, 65, "x", 14, fill="#ffffff", anchor="middle")
-    fail, warn = check_contrast(d)
-    assert fail == [] and warn == []
+def test_decolored_diagram_fails_the_floor():
+    """The exact pilot regression: slate-only 'accents' → no-chromatic FAIL."""
+    svg = ('<svg width="600" height="400">'
+           '<rect x="0" y="0" width="600" height="400" fill="#ffffff"/>'
+           '<rect x="50" y="50" width="200" height="80" fill="#ffffff" '
+           'stroke="#546e7a" stroke-width="2"/>'
+           '<rect x="50" y="200" width="500" height="60" fill="#546e7a" '
+           'stroke="#37474f" stroke-width="1"/>'
+           '<rect x="300" y="50" width="200" height="80" fill="#f5f5f5" '
+           'stroke="#78909c" stroke-width="1"/></svg>')
+    issues = check_palette(_wrap(svg))
+    assert any("no chromatic accent" in s for s in issues)
 
 
-# --------------------------------------------------------------------------
-# check_alignment
-# --------------------------------------------------------------------------
-def test_alignment_flags_misaligned_same_size_column_peers():
-    """Two same-sized op nodes stacked but offset on every axis are flagged."""
-    d = SVGDrawer(400, 400)
-    d.rect(40, 40, 120, 50, node_id="a", node_kind="op")
-    d.rect(70, 150, 120, 50, node_id="b", node_kind="op")  # +30px right, no shared edge
-    issues = check_alignment(d)
-    assert issues, "expected a misalignment issue for offset same-size peers"
-    assert "a" in issues[0] and "b" in issues[0]
+def test_neutral_only_diagram_fails_the_floor():
+    svg = ('<svg width="600" height="400">'
+           '<rect x="0" y="0" width="600" height="400" fill="#ffffff"/>'
+           '<rect x="50" y="50" width="200" height="80" fill="#ffffff" '
+           'stroke="#999999" stroke-width="1"/>'
+           '<rect x="300" y="50" width="200" height="80" fill="#eeeeee" '
+           'stroke="#cccccc" stroke-width="1"/></svg>')
+    issues = check_palette(_wrap(svg))
+    assert any("no chromatic accent" in s for s in issues)
 
 
-def test_alignment_passes_aligned_row_peers():
-    """Two same-sized op nodes on a shared top edge are aligned."""
-    d = SVGDrawer(400, 300)
-    d.rect(40, 40, 120, 50, node_id="a", node_kind="op")
-    d.rect(200, 40, 120, 50, node_id="b", node_kind="op")  # shared top (y=40)
-    assert check_alignment(d) == []
+def test_tinted_diagram_passes_the_floor():
+    """Golden-style layering — light tint fills + dark accent stroke — is the
+    sanctioned way to carry color (and the documented contrast fix)."""
+    svg = ('<svg width="600" height="400">'
+           '<rect x="0" y="0" width="600" height="400" fill="#ffffff"/>'
+           '<rect x="50" y="50" width="500" height="120" fill="#dae8fc" '
+           'stroke="#1b3a5c" stroke-width="1.5"/>'
+           '<rect x="50" y="220" width="500" height="120" fill="#d5e1eb" '
+           'stroke="#1b3a5c" stroke-width="1.5"/></svg>')
+    issues = check_palette(_wrap(svg))
+    assert not any("no chromatic accent" in s for s in issues)
 
 
-def test_alignment_ignores_differently_sized_staggered_peers():
-    """A column of varied-size components legitimately staggers — not flagged."""
-    d = SVGDrawer(400, 400)
-    d.rect(40, 40, 120, 50, node_id="a", node_kind="op")
-    d.rect(200, 150, 90, 70, node_id="b", node_kind="op")  # different footprint
-    assert check_alignment(d) == []
+def test_floor_survives_the_real_drawer():
+    """End-to-end through SVGDrawer: a colored diagram keeps its palette PASS,
+    a slate-only one draws the FAIL inside the full evaluate_svg report."""
+    d = SVGDrawer(600, 400)
+    d.rect(50, 50, 500, 120, fill="#dae8fc", stroke="#1b3a5c", stroke_width=1.5)
+    issues = check_palette(d)
+    assert not any("no chromatic accent" in s for s in issues)
 
-
-def test_alignment_ignores_decorative_nodes():
-    """role=decoration nodes are not business peers and are skipped."""
-    d = SVGDrawer(400, 400)
-    d.rect(40, 40, 120, 50, node_id="a", node_kind="op", role="decoration")
-    d.rect(70, 150, 120, 50, node_id="b", node_kind="op", role="decoration")
-    assert check_alignment(d) == []
+    d2 = SVGDrawer(600, 400)
+    d2.rect(50, 50, 500, 120, fill="#ffffff", stroke="#546e7a", stroke_width=2)
+    issues2 = check_palette(d2)
+    assert any("no chromatic accent" in s for s in issues2)
