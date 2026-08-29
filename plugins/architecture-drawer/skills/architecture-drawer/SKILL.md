@@ -1,6 +1,6 @@
 ---
 name: architecture-drawer
-description: Use when asked to draw system architecture diagrams, generate technical architecture SVGs, or export architecture diagrams to editable PowerPoint presentations. Supports multi-layer diagrams with automatic layout validation and scoring (16-dimension evaluator catches collisions, overlaps, dangles, crossings, palette issues incl. colorless diagrams, low-contrast labels, misaligned peers).
+description: Use when asked to draw system architecture diagrams, generate technical architecture SVGs, or export architecture diagrams to editable PowerPoint presentations. Supports multi-layer diagrams with automatic layout validation and scoring (16-dimension evaluator catches collisions, overlaps, dangles, crossings, palette issues incl. colorless and gray-dominant diagrams, low-contrast labels, misaligned peers).
 ---
 
 # SVG Architecture Drawer (Smart Version)
