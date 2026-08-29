@@ -49,7 +49,9 @@ Below the layers:
 - Card row distributes cards with EQUAL gaps: `(730 − n·cardW) / (n+1)`.
 - Below the bands: LLM API box (730 × 40), then 18 px gap, then info box (730 × 76).
 - Flow spines sit OUTSIDE the card area: left spine at x ≈ 24 (left of column);
-  right spine at x ≈ 776 (near the band's right inner edge).
+  right spine at x ≈ 776 (in the inter-band gutters, level with the band
+  edges — segments must NEVER cross into a band's filled rectangle or the
+  LLM box interior; kiss edges, don't slice them).
 - Tool arrow sits at the right edge of the Agent Core band (x ≈ 798 → 894).
 
 ### Palette (exact hex) — 7 accents

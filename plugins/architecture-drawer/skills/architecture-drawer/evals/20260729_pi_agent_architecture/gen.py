@@ -127,8 +127,13 @@ for tp, bt in [(bts[0],tps[1]),(bts[1],tps[2]),(bts[2],tps[3]),(bts[3],LLMY)]:
     d.line(FL, tp+14, FL, bt-14, stroke=SK, stroke_width=2.8, marker_end="dn")
 d.text(FL+14, (bts[0]+tps[1])//2+4, "请求下行 ↓", font_size=F[3], fill=TX[1], anchor="start", bbox=BB)
 
-for tp, bt in [(LLMY+LLMH,bts[3]),(tps[3],bts[2]),(tps[2],bts[1]),(tps[1],bts[0])]:
-    d.line(FR, tp-16, FR, bt+16, stroke=EV, stroke_width=2.8, marker_end="up")
+# Right spine (up, AgentEvent). All segments live in the inter-band gutters;
+# the first one kisses the LLM box's TOP edge (LLMY+8) instead of starting
+# 24px INSIDE it — the old LLMY+LLMH-16 start painted the orange arrow over
+# the LLM component's interior (箭头盖在组件上).
+for y_from, y_to in [(LLMY+8, bts[3]+16), (tps[3]-16, bts[2]+16),
+                     (tps[2]-16, bts[1]+16), (tps[1]-16, bts[0]+16)]:
+    d.line(FR, y_from, FR, y_to, stroke=EV, stroke_width=2.8, marker_end="up")
 d.text(FR+10, (bts[0]+tps[1])//2+4, "↑ AgentEvent 事件流", font_size=F[3], fill=EV, anchor="start", bbox=BB)
 
 # Tool arrow
