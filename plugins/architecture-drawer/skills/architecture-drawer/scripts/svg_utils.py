@@ -523,10 +523,10 @@ class SVGDrawer:
     # Primitives (rendering + optional semantic registration)
     # ------------------------------------------------------------------
     def _rect_xml(self, x, y, w, h, rx, ry, fill, stroke, stroke_width,
-                  opacity, id_attr, extra, role_attr):
+                  opacity, id_attr, extra, attrs):
         return (f'<rect {id_attr} x="{x}" y="{y}" width="{w}" height="{h}" '
                 f'rx="{rx}" ry="{ry}" fill="{fill}" stroke="{stroke}" '
-                f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{role_attr} {extra} />')
+                f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{attrs} {extra} />')
 
     def rect(self, x, y, w, h, rx=5, ry=5, fill="white", stroke="black",
              stroke_width=1, opacity=1, id=None, extra="", dashed=False,
@@ -542,11 +542,15 @@ class SVGDrawer:
         """
         id_attr = f'id="{id}"' if id else ""
         extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
-        role_attr = f' data-graph-role="{role}"' if role else ""
+        # Semantic identity emitted into the SVG so downstream checkers can
+        # map rendered geometry back to declared roles (data-graph-role for
+        # check filtering, data-node-id for brief-contract attribution).
+        attrs = (f' data-graph-role="{role}"' if role else "") + \
+                (f' data-node-id="{node_id}"' if node_id else "")
         start, bbox_idx = len(self.elements), len(self.bboxes)
         self.add_element(
             self._rect_xml(x, y, w, h, rx, ry, fill, stroke, stroke_width,
-                           opacity, id_attr, extra, role_attr),
+                           opacity, id_attr, extra, attrs),
             BBox(x, y, w, h) if bbox else None,
         )
         self._record_color(fill, stroke)
@@ -557,7 +561,7 @@ class SVGDrawer:
                 node, start, bbox_idx, bbox,
                 lambda nx, ny: [self._rect_xml(
                     nx, ny, w, h, rx, ry, fill, stroke, stroke_width,
-                    opacity, id_attr, extra, role_attr)],
+                    opacity, id_attr, extra, attrs)],
                 lambda nx, ny: BBox(nx, ny, w, h))
 
     def text(self, x, y, content, font_size=14, font_family="Arial, sans-serif",
@@ -640,9 +644,9 @@ class SVGDrawer:
         self._record_color(fill)
 
     def _circle_xml(self, cx, cy, r, fill, stroke, stroke_width,
-                    opacity, id_attr, extra, role_attr):
+                    opacity, id_attr, extra, attrs):
         return (f'<circle {id_attr} cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" '
-                f'stroke="{stroke}" stroke-width="{stroke_width}" fill-opacity="{opacity}"{role_attr} {extra} />')
+                f'stroke="{stroke}" stroke-width="{stroke_width}" fill-opacity="{opacity}"{attrs} {extra} />')
 
     def circle(self, cx, cy, r, fill="white", stroke="black", stroke_width=1,
                opacity=1, id=None, node_id=None, node_kind="junction", bbox=False,
@@ -653,11 +657,12 @@ class SVGDrawer:
         the center register distance 0)."""
         id_attr = f'id="{id}"' if id else ""
         extra = " ".join(filter(None, [_dash_attr(dashed), extra]))
-        role_attr = f' data-graph-role="{role}"' if role else ""
+        attrs = (f' data-graph-role="{role}"' if role else "") + \
+                (f' data-node-id="{node_id}"' if node_id else "")
         start, bbox_idx = len(self.elements), len(self.bboxes)
         self.add_element(
             self._circle_xml(cx, cy, r, fill, stroke, stroke_width,
-                             opacity, id_attr, extra, role_attr),
+                             opacity, id_attr, extra, attrs),
             BBox(cx - r, cy - r, 2 * r, 2 * r) if bbox else None,
         )
         self._record_color(fill, stroke)
@@ -668,7 +673,7 @@ class SVGDrawer:
                 node, start, bbox_idx, bbox,
                 lambda nx, ny: [self._circle_xml(
                     nx + r, ny + r, r, fill, stroke, stroke_width,
-                    opacity, id_attr, extra, role_attr)],
+                    opacity, id_attr, extra, attrs)],
                 lambda nx, ny: BBox(nx, ny, 2 * r, 2 * r))
 
     def database(self, x, y, w, h, fill="white", stroke="black", stroke_width=1,
@@ -677,6 +682,7 @@ class SVGDrawer:
         """Cylinder (database) shape. Top ellipse depth = min(8, h*0.12)."""
         depth = min(8, h * 0.12)
         ra = f' data-graph-role="{role}"' if role else ""
+        na = f' data-node-id="{node_id}"' if node_id else ""
         id_attr = f'id="{id}"' if id else ""
         body = (f'M 0,{depth} A {w/2},{depth} 0 0 1 {w},{depth} '
                 f'L {w},{h-depth} A {w/2},{depth} 0 0 1 0,{h-depth} Z')
@@ -684,7 +690,7 @@ class SVGDrawer:
         self.add_element(
             f'<g transform="translate({x},{y})" {id_attr}>'
             f'<path d="{body}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" '
-            f'fill-opacity="{opacity}"{ra} {extra}/>'
+            f'fill-opacity="{opacity}"{ra}{na} {extra}/>'
             f'<path d="{top}" fill="none" stroke="{stroke}" stroke-width="{stroke_width}"{ra}/>'
             f'</g>', BBox(x, y, w, h) if bbox else None)
         self._record_color(fill, stroke)
@@ -699,12 +705,13 @@ class SVGDrawer:
                  extra="", role=None, label=None):
         """Diamond (decision) shape. Four points around center."""
         ra = f' data-graph-role="{role}"' if role else ""
+        na = f' data-node-id="{node_id}"' if node_id else ""
         id_attr = f'id="{id}"' if id else ""
         pts = f'{w/2},0 {w},{h/2} {w/2},{h} 0,{h/2}'
         self.add_element(
             f'<g transform="translate({x},{y})" {id_attr}>'
             f'<polygon points="{pts}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" '
-            f'fill-opacity="{opacity}"{ra} {extra}/></g>',
+            f'fill-opacity="{opacity}"{ra}{na} {extra}/></g>',
             BBox(x, y, w, h) if bbox else None)
         self._record_color(fill, stroke)
         if node_id:
@@ -718,12 +725,13 @@ class SVGDrawer:
                 extra="", role=None, label=None):
         """Hexagon (gateway) with 25% corner insets."""
         ra = f' data-graph-role="{role}"' if role else ""
+        na = f' data-node-id="{node_id}"' if node_id else ""
         id_attr = f'id="{id}"' if id else ""
         pts = f'{w*0.25},0 {w*0.75},0 {w},{h/2} {w*0.75},{h} {w*0.25},{h} 0,{h/2}'
         self.add_element(
             f'<g transform="translate({x},{y})" {id_attr}>'
             f'<polygon points="{pts}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" '
-            f'fill-opacity="{opacity}"{ra} {extra}/></g>',
+            f'fill-opacity="{opacity}"{ra}{na} {extra}/></g>',
             BBox(x, y, w, h) if bbox else None)
         self._record_color(fill, stroke)
         if node_id:
@@ -737,6 +745,7 @@ class SVGDrawer:
                   extra="", role=None, label=None):
         """Component box with two small tabs on the left edge."""
         ra = f' data-graph-role="{role}"' if role else ""
+        na = f' data-node-id="{node_id}"' if node_id else ""
         id_attr = f'id="{id}"' if id else ""
         tab1 = f'<rect x="-8" y="{h*0.3}" width="16" height="8" rx="1" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"{ra}/>'
         tab2 = f'<rect x="-8" y="{h*0.55}" width="16" height="8" rx="1" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}"{ra}/>'
@@ -747,7 +756,7 @@ class SVGDrawer:
         self.add_element(
             f'<g transform="translate({x},{y})" {id_attr}>'
             f'<rect width="{w}" height="{h}" rx="4" ry="4" fill="{fill}" stroke="{stroke}" '
-            f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{ra} {extra}/>'
+            f'stroke-width="{stroke_width}" fill-opacity="{opacity}"{ra}{na} {extra}/>'
             f'{tab1}{tab2}</g>', BBox(x - 8, y, w + 8, h) if bbox else None)
         self._record_color(fill, stroke)
         if node_id:
@@ -761,6 +770,7 @@ class SVGDrawer:
               extra="", role=None, label=None):
         """Multi-lobe cloud built from cubic curves (ink-graph shape #9)."""
         ra = f' data-graph-role="{role}"' if role else ""
+        na = f' data-node-id="{node_id}"' if node_id else ""
         id_attr = f'id="{id}"' if id else ""
         d = (f'M {w*0.22},{h*0.68} C {w*0.10},{h*0.68} 0,{h*0.58} 0,{h*0.46} '
              f'C 0,{h*0.34} {w*0.10},{h*0.24} {w*0.22},{h*0.24} '
@@ -773,7 +783,7 @@ class SVGDrawer:
         self.add_element(
             f'<g transform="translate({x},{y})" {id_attr}>'
             f'<path d="{d}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" '
-            f'fill-opacity="{opacity}"{ra} {extra}/></g>',
+            f'fill-opacity="{opacity}"{ra}{na} {extra}/></g>',
             BBox(x, y, w, h) if bbox else None)
         self._record_color(fill, stroke)
         if node_id:
