@@ -19,6 +19,8 @@ sys.path.insert(0, str(_SKILL))
 from svg_utils import SVGDrawer, save_svg  # noqa: E402
 from evaluator import evaluate_svg  # noqa: E402
 from svg2pptx import svg_to_pptx  # noqa: E402
+from design_brief import DesignBrief, ColorSpec  # noqa: E402
+from semantic_qa import run_semantic_qa  # noqa: E402
 
 OUT = _HERE / "hello_arch"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -38,9 +40,29 @@ d.text(750, 162, "Data Store", font_size=14, weight="bold", bbox=False)
 d.connect("api", "right", "logic", "left", stroke="#1B3A5C", marker_end="arrow")
 d.connect("logic", "right", "store", "left", stroke="#1B3A5C", marker_end="arrow")
 
+# Design Brief (Step 1) — three primary nodes, no containers; the API →
+# Logic → Store arrows run left-to-right, so no chain stages are declared.
+BRIEF = DesignBrief(
+    scheme="S1",
+    layout="node",
+    flow="left-right",
+    palette_role={
+        "api":   ColorSpec("#D5E1EB", "#1B3A5C"),
+        "logic": ColorSpec("#BBCEDF", "#1B3A5C"),
+        "store": ColorSpec("#9BB9D1", "#1B3A5C"),
+    },
+    flow_chain=(),
+)
+
 score, report = evaluate_svg(d)
 print(f"Quality Score: {score}")
+qa = run_semantic_qa(d, expected_size=(900, 320), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
+    print(line)
+
 
 save_svg(d.render(), str(OUT / "hello_arch.svg"))
 svg_to_pptx(d.render(), str(OUT / "hello_arch.pptx"))
+BRIEF.write(str(OUT / "brief.json"))
 print(f"Wrote {OUT}")

@@ -1,0 +1,20 @@
+{
+  "scheme": "S1",
+  "layout": "node",
+  "flow": "left-right",
+  "flow_chain": [],
+  "palette_role": {
+    "api": {
+      "fill": "#d5e1eb",
+      "stroke": "#1b3a5c"
+    },
+    "logic": {
+      "fill": "#bbcedf",
+      "stroke": "#1b3a5c"
+    },
+    "store": {
+      "fill": "#9bb9d1",
+      "stroke": "#1b3a5c"
+    }
+  }
+}
