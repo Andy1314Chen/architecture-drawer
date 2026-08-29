@@ -3,6 +3,39 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — eval specs rewritten to coarse semantic form (de-specification)
+
+**Problem (maintainer decision):** all 8 `evals/*/input.md` carried a
+"Design Specification" half that was the golden `gen.py` transcribed into
+prose — band/node y-coordinate tables (cicd listed all 13 spine y-centers),
+per-node W×H token tables (vllm), the equal-gap formula `(730−n·cardW)/(n+1)`
+(pi_agent), exact hex palettes, font tiers, rx/stroke-width specs. The golden
+SVG is deliberately kept out of the agent-replay sandbox as an anti-leakage
+measure, but a spec encoding the golden's geometry is the same information in
+prose form — the replay measured "transcribe a complete layout recipe into
+DSL", not the skill's text→diagram capability, and SKILL.md's completion mode
+was never exercised (every spec hit faithful mode). Corroborating signal:
+6-7/7 cases scored 100 on the first agent round — no discriminative power.
+
+**Change:** each input.md now keeps only semantics (components, layers,
+relations, flows, role-color vocabulary, bilingual conventions, real-vs-
+decorative edge distinctions) and ends with an explicit hand-off: layout,
+palette, typography and geometry are the skill's to design per its design
+system. Deterministic layer untouched: frozen `gen.py`, SCORE_THRESHOLDS and
+golden snapshots all unchanged.
+
+**Side effect:** golden diagrams now cover 100% of each coarse spec's
+bold/backtick entities — the former `spec-entities-partial` warns on
+satellite/vllm/cicd/pi_agent came from design-token backticks the diagrams
+rightly don't reproduce. Semantic-QA allow-list shrank to mlir's verified
+true positives (unused `ag` marker + 6 empty texts).
+
+**Verification:** `pytest -q` green (66 passed, 1 opt-in skip) before and
+after; per-eval semantic codes printed directly to confirm the allow-list
+matches reality. **Expected next `--agent-replay` run:** first-round scores
+drop, refine rounds become meaningful, wall time per case rises — that is
+the test regaining signal, not a regression.
+
 ## 2026-08-29 — removed the LLM-replay layer (former "Protocol A")
 
 **Decision (maintainer):** drop `pytest --llm-replay` / `--llm-iter` entirely.

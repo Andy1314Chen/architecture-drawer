@@ -246,17 +246,15 @@ def _eval_svgs():
 def test_all_eval_svgs_pass_semantic_qa():
     """No unexpected flags on the golden outputs.
 
-    Allow-listed true positives & advisory warns (verified by hand):
-      - mlir: unused 'ag' marker + 6 genuinely empty <text> elements;
-      - satellite/vllm/cicd/pi_agent: spec-entities-partial — spec bolds use
-        wording the diagram reasonably paraphrases (e.g. 事件序列 vs 事件流).
+    Allow-listed true positives (verified by hand):
+      - mlir: unused 'ag' marker + 6 genuinely empty <text> elements.
+    Since the eval specs were rewritten to coarse semantic form (2026-08-29),
+    every other golden covers 100% of its spec's bold/backtick entities —
+    the former spec-entities-partial warns came from design-token backticks
+    in the over-detailed specs, which the diagrams rightly don't reproduce.
     """
     allowed = {
         "mlir_pipeline.svg": {"marker-unused", "text-empty"},
-        "satellite_arch.svg": {"spec-entities-partial"},
-        "vllm_arch.svg": {"spec-entities-partial"},
-        "cicd_pipeline_flow.svg": {"spec-entities-partial"},
-        "pi_agent_architecture.svg": {"spec-entities-partial"},
     }
     for svg_path in _eval_svgs():
         spec = svg_path.parent / "input.md"
