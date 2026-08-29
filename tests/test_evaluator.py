@@ -76,6 +76,53 @@ def test_tinted_diagram_passes_the_floor():
     assert not any("no chromatic accent" in s for s in issues)
 
 
+def test_gray_dominant_structure_fails():
+    """The agent_infra replay defect: color present but marginal — neutral
+    bands/cards everywhere, chromatic color confined to two small chips.
+    Low on BOTH axes (elements AND area) -> FAIL."""
+    parts = ['<svg width="1200" height="900" xmlns="http://www.w3.org/2000/svg">',
+             '<rect x="0" y="0" width="1200" height="900" fill="#ffffff"/>']
+    for i in range(6):  # the gray skeleton
+        parts.append(f'<rect x="50" y="{40 + i * 140}" width="1000" height="100" '
+                     f'fill="#f2f2f2" stroke="#b0b0b0" stroke-width="1"/>')
+    for i in range(3):  # white cards on top
+        parts.append(f'<rect x="80" y="{60 + i * 140}" width="200" height="60" '
+                     f'fill="#ffffff" stroke="#bebebe" stroke-width="1"/>')
+    # the only color: two tiny chips
+    parts.append('<rect x="400" y="60" width="60" height="30" fill="#dbeafe" stroke="#2563eb"/>')
+    parts.append('<rect x="400" y="200" width="60" height="30" fill="#fee2e2" stroke="#dc2626"/>')
+    parts.append('</svg>')
+    issues = check_palette(_wrap("".join(parts), 1200, 900))
+    assert any("gray-dominant" in s for s in issues)
+
+
+def test_tinted_bands_are_not_gray_dominant():
+    """Band-style scheme: tinted band fills ride the AREA axis."""
+    parts = ['<svg width="1200" height="900" xmlns="http://www.w3.org/2000/svg">',
+             '<rect x="0" y="0" width="1200" height="900" fill="#ffffff"/>']
+    for i in range(6):
+        parts.append(f'<rect x="50" y="{40 + i * 140}" width="1000" height="100" '
+                     f'fill="#dae8fc" stroke="#1b3a5c" stroke-width="1.5"/>')
+    parts.append('</svg>')
+    issues = check_palette(_wrap("".join(parts), 1200, 900))
+    assert not any("gray-dominant" in s for s in issues)
+
+
+def test_node_style_colors_ride_the_element_axis():
+    """Node-style scheme (constellation/flowchart): neutral bands are fine
+    when the primary NODES carry the color."""
+    parts = ['<svg width="1200" height="900" xmlns="http://www.w3.org/2000/svg">',
+             '<rect x="0" y="0" width="1200" height="900" fill="#ffffff"/>']
+    for i in range(5):  # neutral layer bands
+        parts.append(f'<rect x="100" y="{40 + i * 170}" width="1000" height="120" '
+                     f'fill="#f7f7f7" stroke="none"/>')
+    for i in range(20):  # colored constellation nodes
+        parts.append(f'<circle cx="{150 + (i % 5) * 200}" cy="{100 + (i // 5) * 170}" '
+                     f'r="15" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>')
+    parts.append('</svg>')
+    issues = check_palette(_wrap("".join(parts), 1200, 900))
+    assert not any("gray-dominant" in s for s in issues)
+
 def test_floor_survives_the_real_drawer():
     """End-to-end through SVGDrawer: a colored diagram keeps its palette PASS,
     a slate-only one draws the FAIL inside the full evaluate_svg report."""

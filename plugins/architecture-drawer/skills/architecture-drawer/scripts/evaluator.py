@@ -984,6 +984,71 @@ def _is_chromatic(color):
     return s >= 0.25
 
 
+def _chromatic_shares(svg):
+    """(element_share, area_share) %% of chromatic business shapes.
+
+    A shape is chromatic when its fill carries a hue, or it is white/unfilled
+    with a chromatic stroke (outline-colored chips). Background/legend/
+    decoration roles, the full-canvas rect, and specks under 400 px^2 are
+    excluded. Element share catches node-style diagrams (color lives in many
+    small nodes — constellation/flowchart); area share catches band-style
+    diagrams (color lives in large tinted containers). Gray-dominance is low
+    on BOTH axes — one strong axis is a legitimate scheme.
+    """
+    import xml.etree.ElementTree as _ET
+    try:
+        root = _ET.fromstring(svg)
+    except _ET.ParseError:
+        return 100.0, 100.0
+    m = _re.search(r'<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"', svg)
+    cw, chh = (float(m.group(1)), float(m.group(2))) if m else (0.0, 0.0)
+    num = r'-?\d+(?:\.\d+)?'
+    chrom_e = neutr_e = 0
+    chrom_a = neutr_a = 0.0
+    for el in root.iter():
+        tag = el.tag.rsplit('}', 1)[-1]
+        if tag not in ("rect", "circle", "ellipse", "polygon"):
+            continue
+        a = el.attrib
+        if a.get("data-graph-role") in ("background", "legend", "decoration"):
+            continue
+        fill = (a.get("fill") or "").strip().lower()
+        stroke = (a.get("stroke") or "").strip().lower()
+        is_chrom = _is_chromatic(fill) or (
+            fill in ("", "none", "#fff", "#ffffff") and _is_chromatic(stroke))
+        try:
+            if tag == "rect":
+                fw = float(a.get("width", 0) or 0)
+                fh = float(a.get("height", 0) or 0)
+                area = fw * fh
+                if cw and fw >= cw - 2 and fh >= chh - 2:
+                    continue                      # full-canvas background
+            elif tag == "circle":
+                area = 3.14159 * float(a.get("r", 0) or 0) ** 2
+            elif tag == "ellipse":
+                area = 3.14159 * (float(a.get("rx", 0) or 0)
+                                  * float(a.get("ry", 0) or 0))
+            else:
+                pts = [float(v) for v in _re.findall(num, a.get("points", ""))]
+                if len(pts) < 4:
+                    continue
+                xs, ys = pts[0::2], pts[1::2]
+                area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+        except ValueError:
+            continue
+        if area < 400:
+            continue
+        if is_chrom:
+            chrom_e += 1
+            chrom_a += area
+        else:
+            neutr_e += 1
+            neutr_a += area
+    te, ta = chrom_e + neutr_e, chrom_a + neutr_a
+    return (100.0 * chrom_e / te if te else 100.0,
+            100.0 * chrom_a / ta if ta else 100.0)
+
+
 def check_palette(drawer, max_colors=8, hard_max=12):
     """Enforce a constrained, coherent color palette (parses the rendered SVG).
 
@@ -1032,6 +1097,25 @@ def check_palette(drawer, max_colors=8, hard_max=12):
             f"Do NOT fix text contrast by de-coloring: pair a light tint fill "
             f"with its dark accent stroke instead (clears WCAG AA)."
         )
+
+    # Gray-dominance (灰色主导): color present but marginal. Calibrated on all
+    # 8 goldens (each clears at least one axis by >= 2x margin — node-style
+    # goldens ride the element axis, band-style goldens the area axis) and on
+    # the agent_infra replay artifact that triggered the complaint: 11%
+    # elements / 2.3% area — every band and card neutral, color confined to a
+    # few small chips. Low on BOTH axes is a defect; one strong axis is not.
+    if chroma:
+        elem_share, area_share = _chromatic_shares(svg)
+        if elem_share < 35.0 and area_share < 15.0:
+            issues.append(
+                f"[palette] gray-dominant (灰色主导): chromatic color covers "
+                f"only {elem_share:.0f}% of business elements and "
+                f"{area_share:.0f}% of painted area - the structure (bands, "
+                f"containers, cards) reads gray with color confined to small "
+                f"chips. Tint the band/container fills from the scheme "
+                f"(band-style) or color the primary nodes (node-style) so "
+                f"color owns the skeleton, not the decoration."
+            )
 
     # Extreme luminance clash, compared WITHIN each channel (fill vs fill,
     # stroke vs stroke). A pastel fill paired with a same-family dark stroke is
@@ -1340,7 +1424,7 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
     palette_issues = check_palette(drawer)
     if palette_issues:
         hard = any(("hard cap" in s) or ("no chromatic accent" in s)
-                   for s in palette_issues)
+                   or ("gray-dominant" in s) for s in palette_issues)
         penalty = min(len(palette_issues) * 4, 8 if hard else 4)
         score -= penalty
         tag = "FAIL" if hard else "WARN"
