@@ -24,9 +24,7 @@ Leak-free sandbox shape (every backend):
 The skill's ``evals/`` directory is NEVER copied. Feeding the golden
 ``gen.py`` to the agent would turn the replay into a reverse-transcription
 exercise (it copies coordinates verbatim, defeats the purpose of testing
-text->diagram understanding, and propagates any golden defects) — the same
-anti-leakage invariant the Protocol-A ``--llm-replay`` layer documents in
-``conftest._build_replay_prompt``.
+text->diagram understanding, and propagates any golden defects).
 
 References (Pi CLI + skills, retrieved 2026-08-02):
   - Print mode: ``pi -p "<prompt>"`` (non-interactive, prints response, exits)

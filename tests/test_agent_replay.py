@@ -1,14 +1,14 @@
 """Opt-in real-agent replay: each eval's ``input.md`` -> a real coding agent
 authors ``gen.py``; the harness is the deterministic score + artifact gate.
 
-This mirrors Protocol-A ``--llm-replay`` but goes one layer closer to real
-usage: the skill is *installed* into a leak-free sandbox, and a real agent
-harness (the **Pi coding agent**, pi.dev) discovers it, reads ``input.md``, and
-self-authors the generator — exactly what a user does in their editor. The
+This is the replay layer closest to real usage: the skill is *installed*
+into a leak-free sandbox, and a real agent harness (the **Pi coding agent**,
+pi.dev) discovers it, reads ``input.md``, and self-authors the generator —
+exactly what a user does in their editor. The
 harness then re-runs the produced ``gen.py`` deterministically (no trust in
 agent self-reports) and asserts:
 
-  - the final quality score clears ``LLM_REPLAY_MIN_SCORE`` (80);
+  - the final quality score clears ``AGENT_REPLAY_MIN_SCORE`` (80);
   - the SVG exists and is XML-parseable;
   - the PPTX exists, opens via ``python-pptx``, and has shapes;
   - the PNG exists and is non-empty (tolerated per-case when ``rsvg-convert``
@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 
 from agent_backends import PiAgentBackend, prepare_sandbox
-from conftest import ROOT, SCRIPTS, LLM_REPLAY_MIN_SCORE, score_gen_script
+from conftest import ROOT, SCRIPTS, AGENT_REPLAY_MIN_SCORE, score_gen_script
 
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
@@ -176,7 +176,7 @@ def _agent_replay_one(
     Round 0 sends the initial prompt. Then up to *max_iter* stateless refine
     rounds: each re-scores the on-disk ``gen.py`` and, if below 100 or with
     [FAIL] items, asks the agent to fix it. It also stops early once a
-    non-FAIL score past ``LLM_REPLAY_MIN_SCORE`` plateaus (no gain over the
+    non-FAIL score past ``AGENT_REPLAY_MIN_SCORE`` plateaus (no gain over the
     prior round), so a stable ~95 does not burn every remaining refine call.
     Finally the artifacts are gated.
 
@@ -203,7 +203,7 @@ def _agent_replay_one(
             if (
                 prev_score is not None
                 and score is not None
-                and score >= LLM_REPLAY_MIN_SCORE
+                and score >= AGENT_REPLAY_MIN_SCORE
                 and not _has_fail(report)
                 and score <= prev_score
             ):
@@ -284,9 +284,9 @@ def test_agent_replay_quality(eval_cases, request):
         except Exception as exc:  # noqa: BLE001 - isolate one case's crash
             failures.append(f"[{name}] agent run error: {exc}")
             continue
-        if best < LLM_REPLAY_MIN_SCORE:
+        if best < AGENT_REPLAY_MIN_SCORE:
             failures.append(
-                f"[{name}] agent best score {best} < floor {LLM_REPLAY_MIN_SCORE}"
+                f"[{name}] agent best score {best} < floor {AGENT_REPLAY_MIN_SCORE}"
             )
         for p in problems:
             failures.append(f"[{name}] {p}")

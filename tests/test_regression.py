@@ -13,9 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import (
-    GOLDEN, LLM_REPLAY_MIN_SCORE, SCORE_THRESHOLDS, run_gen, replay_gen,
-)
+from conftest import GOLDEN, SCORE_THRESHOLDS, run_gen
 
 
 
@@ -59,45 +57,5 @@ def test_eval_quality_and_snapshot(eval_cases, request):
     if failures:
         pytest.fail(
             f"{len(failures)} regression failure(s) across {checked} eval(s):\n  - "
-            + "\n  - ".join(failures)
-        )
-
-
-
-@pytest.mark.llm_replay
-def test_llm_replay_quality(eval_cases, request):
-    """LLM replay: read each eval's input.md, regenerate via LLM, score only.
-
-    Opt-in (``pytest --llm-replay``). Unlike the frozen-gen snapshot test, no
-    golden comparison is performed — only the score must clear the floor.
-    This covers the skill's core promise: "turn a text description into a
-    compliant diagram". Run locally or nightly, not in the PR gate.
-    """
-    if not request.config.getoption("--llm-replay"):
-        pytest.skip("--llm-replay not passed; deterministic gate only")
-
-    candidates = {
-        n: d for n, d in eval_cases.items() if (d / "input.md").is_file()
-    }
-    if not candidates:
-        pytest.skip("no eval has an input.md spec to replay")
-
-    failures = []
-    checked = 0
-    for name, eval_dir in sorted(candidates.items()):
-        checked += 1
-        try:
-            score = replay_gen(eval_dir, request.config.getoption("--llm-iter"))
-        except Exception as exc:
-            failures.append(f"[{name}] replay error: {exc}")
-            continue
-        if score < LLM_REPLAY_MIN_SCORE:
-            failures.append(
-                f"[{name}] replay score {score} < floor {LLM_REPLAY_MIN_SCORE}"
-            )
-
-    if failures:
-        pytest.fail(
-            f"{len(failures)} LLM replay failure(s) across {checked} eval(s):\n  - "
             + "\n  - ".join(failures)
         )

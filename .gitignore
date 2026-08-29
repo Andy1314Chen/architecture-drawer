@@ -7,10 +7,6 @@ __pycache__/
 # Maintainer-only guidelines (not user-facing).
 AGENTS.md
 
-# LLM replay outputs (non-deterministic, not version-controlled).
-# See: pytest --llm-replay
-replay_out/
-
 # Generated diagram artifacts (regenerable). The gen.py scripts co-located in
 # evals/<name>/ and examples/<name>/ stay version-controlled; only their
 # SVG/PNG/PPTX outputs are ignored.
