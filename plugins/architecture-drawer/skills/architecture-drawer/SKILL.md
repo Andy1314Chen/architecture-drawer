@@ -50,6 +50,54 @@ in the final reply ("assumed top-to-bottom flow; inferred gateway→auth edge")
 so the user can veto. When two readings are both plausible, pick the simpler
 one and note the alternative.
 
+## Step 1 — Design Brief (开工前完整设计)
+
+After Step 0 classifies the requirement and BEFORE writing any code, produce a
+complete design proposal that combines the user's `input.md` with this skill's
+design system — **state the design, then draw it**. In an interactive session
+you may show the brief first and let the user veto; in headless/automation,
+print it in the reply and proceed.
+
+The brief has five mandatory sections:
+
+1. **Canvas & layout skeleton** — canvas size, band/column/grid partition,
+   margins, and the placement *strategy* as relative formulas (e.g.
+   `gap = (band_w − n·card_w) / (n + 1)`, `y[i+1] = y[i] + h + GUTTER`), not
+   per-element hard-coded coordinates. Name what Step 0 left open (completion
+   mode) or what the spec pinned (faithful mode).
+2. **Palette** — pick ONE preset scheme from `references/design_specs.md`
+   (S1–S4) by information need and give the role→color mapping table: each
+   business role gets a light tint fill PAIRED with its dark accent stroke;
+   op cards stay white; accents ≤8; at least one chromatic accent (the ⑯
+   无配色 floor). Exact hex from the spec, when given, wins over the preset.
+3. **Typography tiers** — 3–4 tiers with concrete values (e.g. 20 / 14 / 12 /
+   10) and which text class uses each (title / section header / node label /
+   note).
+4. **Edge routing** — flow directions, solid vs dashed semantics, spine/bus
+   corridors routed OUTSIDE content areas (kiss container edges, never slice
+   filled rects — the semantic-QA 箭头线盖在组件上 check), junction/merge
+   points, and edge-label placement rules (off the line, perpendicular
+   offset).
+5. **Risk checklist** — the pairings and budgets you expect to flirt with:
+   text-on-fill contrast (⑮) for every tint+text pair, node spacing ≥14px,
+   container gutter ≥20px, font-tier ratios ≥1.15×, marker ids actually used
+   (marker 缺省陷阱).
+
+**Landing rule (常量落盘):** the brief must not stay prose. Every token —
+palette hexes, font tiers, canvas size, key dimensions, gutters — lands as a
+constants block at the top of `gen.py`, so the code is the brief's executable
+form and a reviewer can diff intent against implementation:
+
+```python
+# --- Design Brief tokens (Step 1) — edit here, not scattered below --------
+W, H       = 1240, 970                 # canvas
+GUTTER     = 20                        # band spacing
+INK, SUB   = "#1A1A1A", "#555555"      # text tiers 20/14/12/10
+TINTS      = ["#D5E1EB", "#BBCEDF"]    # S1 layer fills (paired strokes below)
+STROKES    = ["#1B3A5C", "#2563EB"]    # dark accent per tint
+F_TIERS    = [20, 14, 12, 10]
+```
+
 ## Core Workflow: Generate-Evaluate-Correct
 
 ```dot
@@ -64,9 +112,12 @@ digraph eval_loop {
 }
 ```
 
-1. **Content Parsing & Planning**:
+1. **Content Parsing & Design Brief**:
    - Identify layers, components, and flow direction.
    - Determine canvas dimensions (default 1200x800).
+   - Write the Step 1 Design Brief (above) — layout skeleton, palette, tiers,
+     edge routing, risks — BEFORE any drawing code; land its tokens as the
+     gen.py constants block.
 
 2. **Coding & Layout**:
    - Write a Python script calling `$SKILL/svg_utils.py`.
