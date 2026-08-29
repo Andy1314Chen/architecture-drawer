@@ -3,6 +3,33 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — full 8-case agent replay (zai/glm-5.3, coarse specs): 8/8 PASS
+
+**Run:** all 8 evals in parallel as separate `--agent-eval` processes
+(`--agent-provider zai --agent-model glm-5.3 --agent-keep`). Parallel wall
+2503s (~42 min) vs ~4.2h serial. **8/8 exit 0.**
+
+**Per-case deterministic re-gate of the retained sandboxes:** every case
+score 100 with 0 FAIL / 0 WARN, semantic QA 100/clean, 3-6 chromatic hue
+families per diagram, and the Step-1 Design-Brief constants block present in
+every gen.py — the two new skill features (chromatic floor guidance + design
+brief) are structurally adopted across the whole suite, not just vllm.
+
+**Timing spread (completion-time deltas, absolute per-case durations not
+recoverable post-hoc):** finishers span ~0 → 1907s — llama_cpp / cicd /
+agent_infra / llm_inference in minutes, satellite / pi_agent / vllm mid-pack,
+mlir_pipeline alone ~half an hour (its 4-band matrix is the hardest case).
+The spread itself is discriminative signal: difficulty now varies by content,
+which the detailed-spec era's uniform ~15-min transcriptions erased.
+
+**Why a case is slow (>99% is model time):** 1 case = 1-4 stateless pi
+sessions; 1 session = dozens of glm-5.3 tool-turns (read 400-line SKILL.md +
+references + scripts API → brief → 300+ line gen.py → run → read report →
+fix → rerun). Harness-side costs are ~2s (score subprocess) + ~0.1s
+(semantic gate + sandbox prep). Plateau early-exit typically caps a case at
+1-2 sessions. Coarse specs deliberately cost more turns than the old
+transcription specs — that is the capability test working.
+
 ## 2026-08-29 — Step 1 Design Brief + glm-5.3 replay: behaviorally verified
 
 **Feature (user proposal, approach A + 常量落盘):** SKILL.md gains "Step 1 —
