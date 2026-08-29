@@ -252,15 +252,27 @@ def test_all_eval_svgs_pass_semantic_qa():
     every other golden covers 100% of its spec's bold/backtick entities —
     the former spec-entities-partial warns came from design-token backticks
     in the over-detailed specs, which the diagrams rightly don't reproduce.
+
+    Each eval's brief.json (written by its gen.py next to the artifacts) is
+    loaded and passed as the contract — the golden must not only pass the
+    generic checks but honor its own declared design (brief-* codes). A
+    missing brief.json shows up as brief-absent here, so evals cannot silently
+    drop the contract.
     """
     allowed = {
         "mlir_pipeline.svg": {"marker-unused", "text-empty"},
     }
     for svg_path in _eval_svgs():
         spec = svg_path.parent / "input.md"
+        brief_path = svg_path.parent / "brief.json"
+        brief = None
+        if brief_path.is_file():
+            from design_brief import DesignBrief
+            brief = DesignBrief.load(str(brief_path))
         res = run_semantic_qa(
             svg_path.read_text(encoding="utf-8"),
-            spec_text=spec.read_text(encoding="utf-8") if spec.is_file() else None)
+            spec_text=spec.read_text(encoding="utf-8") if spec.is_file() else None,
+            brief=brief)
         unexpected = set(_codes(res)) - allowed.get(svg_path.name, set())
         assert not unexpected, (
             f"{svg_path.name}: semantic QA flagged {sorted(unexpected)} "
