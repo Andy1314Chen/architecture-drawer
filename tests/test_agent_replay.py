@@ -50,14 +50,21 @@ self-contained `gen.py` that draws the architecture described in `input.md`
 using the SVGDrawer DSL.
 
 Resolve the skill's scripts/ directory as documented in `AGENTS.md` (this
-sandbox), import from `svg_utils`, `evaluator`, and `svg2pptx`, and:
+sandbox), import from `svg_utils`, `evaluator`, `svg2pptx`, `design_brief`,
+and `semantic_qa`, and:
 
+- declare a `BRIEF = DesignBrief(...)` (Step 1 design brief: layout, flow,
+  palette_role keyed by data-node-id, flow_chain for pipeline stages) and
+  give the tinted layer containers matching `node_id=` values;
 - call `evaluate_svg(drawer)` and print `print(f"Score: {score}")`;
+- call `run_semantic_qa(drawer, expected_size=(W, H), brief=BRIEF)` and print
+  its report — no `brief-*` FAIL/WARN may remain;
 - iterate (run the script, read its report, adjust coordinates) until the score
   is 100 with no `[FAIL]` items — use `auto_refine` for geometric fixes and fix
   dangles / crossings / text-overlaps by moving nodes and rerouting edges;
-- save the full artifact triplet next to `gen.py`: SVG via `save_svg`, PNG via
-  `rasterize_svg`, PPTX via `svg2pptx.svg_to_pptx`;
+- save the artifact triplet plus `brief.json` (via `BRIEF.write(...)`) next to
+  `gen.py`: SVG via `save_svg`, PNG via `rasterize_svg`, PPTX via
+  `svg2pptx.svg_to_pptx`;
 - write only `gen.py` and its artifacts; do not edit `input.md` or the skill.
 
 When done, print the final score line.
@@ -95,18 +102,17 @@ def _latest(paths: list[Path]) -> Path | None:
 
 
 def _check_artifacts(sandbox: Path) -> list[str]:
-    """Validate the produced SVG/PPTX/PNG. PNG is optional when rsvg is absent."""
-    problems: list[str] = []
-
+    """Validate the produced SVG/PPTX/PNG/brief.json. PNG is optional when
+    rsvg is absent; the brief contract (brief.json) is mandatory — an agent
+    that skips the design brief fails the replay."""
+    problems = []
     svg = _latest(list(sandbox.glob("*.svg")))
     if svg is None:
-        problems.append("no SVG produced")
-    else:
-        try:
-            ET.parse(str(svg))
-        except ET.ParseError as exc:
-            problems.append(f"SVG unparseable: {exc}")
-
+        return ["no SVG produced"]
+    try:
+        ET.parse(str(svg))
+    except ET.ParseError as exc:
+        problems.append(f"SVG does not parse: {exc}")
     pptx = _latest(list(sandbox.glob("*.pptx")))
     if pptx is None:
         problems.append("no PPTX produced")
@@ -115,14 +121,23 @@ def _check_artifacts(sandbox: Path) -> list[str]:
             from pptx import Presentation
             prs = Presentation(str(pptx))
             if not prs.slides or not prs.slides[0].shapes:
-                problems.append("PPTX has no slides/shapes")
+                problems.append("PPTX opens but has no shapes")
         except Exception as exc:  # noqa: BLE001 - surface any pptx failure
-            problems.append(f"PPTX unreadable: {exc}")
-
+            problems.append(f"PPTX does not open: {exc}")
     # PNG needs rsvg-convert; tolerate its absence per-case.
     png = _latest(list(sandbox.glob("*.png")))
     if (png is None or png.stat().st_size == 0) and shutil.which("rsvg-convert"):
         problems.append("no/empty PNG produced (rsvg-convert is installed)")
+    brief = _latest(list(sandbox.glob("brief.json")))
+    if brief is None:
+        problems.append("no brief.json produced (design-brief contract skipped)")
+    else:
+        try:
+            sys.path.insert(0, str(SCRIPTS))
+            from design_brief import DesignBrief  # noqa: WPS433 (sandboxed)
+            DesignBrief.load(str(brief))
+        except Exception as exc:  # noqa: BLE001 - any parse failure fails
+            problems.append(f"brief.json does not parse: {exc}")
     return problems
 
 

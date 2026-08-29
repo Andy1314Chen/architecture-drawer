@@ -1,6 +1,6 @@
 ---
 name: architecture-drawer
-description: Use when asked to draw system architecture diagrams, generate technical architecture SVGs, or export architecture diagrams to editable PowerPoint presentations. Supports multi-layer diagrams with automatic layout validation and scoring (16-dimension evaluator catches collisions, overlaps, dangles, crossings, palette issues incl. colorless and gray-dominant diagrams, low-contrast labels, misaligned peers).
+description: Use when asked to draw system architecture diagrams, generate technical architecture SVGs, or export architecture diagrams to editable PowerPoint presentations. Supports multi-layer diagrams with automatic layout validation and scoring (16-dimension evaluator catches collisions, overlaps, dangles, crossings, palette issues incl. colorless and gray-dominant diagrams, low-contrast labels, misaligned peers, and a Step-1 design-brief contract: the declared palette/layout/flow is asserted against the rendered SVG).
 ---
 
 # SVG Architecture Drawer (Smart Version)
@@ -87,10 +87,16 @@ The brief has five mandatory sections:
    container gutter ≥20px, font-tier ratios ≥1.15×, marker ids actually used
    (marker 缺省陷阱).
 
-**Landing rule (常量落盘):** the brief must not stay prose. Every token —
-palette hexes, font tiers, canvas size, key dimensions, gutters — lands as a
-constants block at the top of `gen.py`, so the code is the brief's executable
-form and a reviewer can diff intent against implementation:
+**Landing rule (常量落盘):** the brief must not stay prose. It lands in TWO
+executable forms:
+
+1. a constants block at the top of `gen.py` (dimensions and tokens the
+   drawing code reads), and
+2. a **`BRIEF = DesignBrief(...)` contract object** from `$SKILL/design_brief.py`
+   — the machine-readable declaration the semantic-QA layer asserts the
+   RENDERED SVG against (palette/layout/flow). The brief is the single source
+   of truth and **mutable during refine**: if a contrast fix changes a tint,
+   update `BRIEF` in the same round rather than silently deviating.
 
 ```python
 # --- Design Brief tokens (Step 1) — edit here, not scattered below --------
@@ -100,7 +106,34 @@ INK, SUB   = "#1A1A1A", "#555555"      # text tiers 20/14/12/10
 TINTS      = ["#D5E1EB", "#BBCEDF"]    # S1 layer fills (paired strokes below)
 STROKES    = ["#1B3A5C", "#2563EB"]    # dark accent per tint
 F_TIERS    = [20, 14, 12, 10]
+
+from design_brief import DesignBrief, ColorSpec
+BRIEF = DesignBrief(
+    scheme="S1", layout="band", flow="top-down",   # layout: band|node; flow: top-down|left-right|none
+    palette_role={                                  # key = data-node-id on the shape
+        "api":    ColorSpec(TINTS[0], STROKES[0]),  # tinted container: fill+stroke PAIR
+        "engine": ColorSpec(TINTS[1], STROKES[0]),
+        "store":  ColorSpec("white",  STROKES[0]),  # plain op cards stay white
+    },
+    flow_chain=("api", "engine"),   # ordered pipeline stages ONLY — side
+)                                   # bands / text-only bands stay out of the chain
+# Render each palette key with a matching node_id= so the contract can
+# attribute rendered shapes: drawer.rect(..., node_id="api", role="layer")
 ```
+
+**Contract rules** (enforced by `check_design_brief` in semantic QA):
+- `palette_role` keys are `data-node-id` values — band layout: layer
+  containers (`role="layer"`); node layout: primary nodes. One map, no
+  duplicate layer list to drift.
+- `flow_chain` is the ordered pipeline (⊆ palette keys). Memory/cache side
+  columns and text-only bands are palette members but NOT chain stages.
+- Declared tints rendered white → FAIL (structure lost its color); wrong
+  tint/stroke or undeclared chromatic paint → WARN; ≥70% of inter-layer
+  edges must follow the declared flow (return edges tolerated); chain
+  first/middle/last layers need out/both/in ≥1.
+- **Capability boundary**: the checker verifies *rendering ↔ self-declared
+  contract* consistency, not *contract ↔ user intent* — spec-entity coverage
+  and human review of the brief guard the intent side.
 
 ## Core Workflow: Generate-Evaluate-Correct
 
@@ -170,24 +203,14 @@ digraph eval_loop {
 
    score, report = evaluate_svg(drawer)          # geometry first
    spec = Path("input.md").read_text() if Path("input.md").exists() else None
-   qa = run_semantic_qa(drawer, expected_size=(1240, 970), spec_text=spec)
+   qa = run_semantic_qa(drawer, expected_size=(1240, 970), spec_text=spec,
+                        brief=BRIEF)             # + the Step-1 contract
    for line in qa.report():
        print(line)
    # qa.has_fail → semantic defect (dangling marker ref, rail over a
-   # component, lost spec entities): must fix before export
+   # component, lost spec entities, brief-contract violation): fix before export
+   # brief omitted → brief-absent WARN: declaring the contract is not optional
    ```
-
-4. **Auto-Correction**:
-   - If the evaluation score is below **80**, analyze the `[FAIL]` items in the report.
-   - Connection issues (`dangles` / `Degenerate edge` / `overlaps`): use `drawer.connect(...)` to let endpoints auto-snap to node borders; avoid manually computing offset coordinates.
-   - `phantom` (phantom anchors): the node referenced by an edge is invisible → give it a real fill/stroke, or use the distinct-port pattern to connect to a visible junction.
-   - `routes through node`: an edge cuts through an intermediate node → reroute via orthogonal bypass channels, or relay through a junction (see distinct-port pattern), keeping a ≥20px gap from the intermediate node.
-   - `cross` (edge crossings): adjust node layout or routing channels so edges don't intersect (reference fireworks' zero-crossing budget).
-   - `too close`: same-kind nodes are clustered → increase spacing or enlarge the canvas.
-   - Arrow position: `connect()` auto-retracts by `marker_tip_depth` — retraction = `(markerWidth − refX) × stroke_width`, derived from the marker dimensions registered by `arrow_head()`, so the arrow tip lands exactly on the target border (neither poking in nor leaving a gap). For custom markers, pass the real dimensions via `arrow_head(id, color, marker_width=, ref_x=)` — no manual tweaking needed.
-   - `font` (font sizes): more than 4 distinct tiers after dedup → converge to 3-4 tiers (title/body/note); near-overlapping tiers (ratio <1.15, e.g. 11/12) → merge into one tier. Recommended modular scale: 20 / 14 / 12 / 10 (all steps ≥1.15). This matches the tier count measured in each ink-graph style.
-   - `palette`: accent count >8 → trim toward a preset scheme (S1–S4) — consolidate near-hue accents, drop redundant category colors; >12 → same, harder. `no chromatic accent` (无配色, FAIL) → restore tinted layer fills + accent strokes from a preset scheme. `gray-dominant` (灰色主导, FAIL) → color is marginal: tint the band/container fills (band-style) or color the primary nodes (node-style) so the scheme owns the skeleton — do not merely enlarge a legend/chip. **Never satisfy a palette or contrast finding by reverting the whole diagram to neutral** — that trades a WARN for a colorless or gray-dominant diagram, which now FAILs. Luminance conflict (very dark + very light coexist) → unify into one brightness family. Non-light background → apply white by default; dark themes must declare `set_background()`/`bg=`. See `references/design_specs.md` for the 4 preset schemes (S1–S4) and when to use each.
-   - Layout issues: adjust component coordinates, spacing, or scale ratio, then regenerate.
    - `text` overflow: text exceeds the canvas → shorten the copy or shift the start point left; text wider than its card/container → shorten, auto-wrap by container width (greedy word-wrap), or widen the container. Note that `<text>` does not enter `bboxes` by default, so collision/boundary checks can't see it — this detection fills that gap.
    - `text overlap` (text on a shape or another text): a label sits on top of a circle/triangle/arc/line or collides with a neighboring label → move the label clear of the shape (place it above/below the icon, not on it) or shorten it. `auto_refine` cannot fix this (no geometry handle for raw `add_element` text) — adjust coordinates manually. This catches overlaps `check_collisions` misses because `bbox=False` text/shapes and `add_element` shapes bypass the collision registry.
    - `contrast` (low text-on-fill contrast): a label doesn't read against its accent card (ratio <3:1 FAIL, <4.5:1 WARN for normal text) → darken/lighten the text fill toward the channel extreme (pure `#000000`/`#ffffff` on a mid-tone card is always safe), or switch the card to a lighter tint of the same hue so a dark label clears AA. **De-coloring the card to white/gray is NOT a fix** — it silences this check by making the diagram colorless, which the ⑯ chromatic floor then FAILs; always keep a tint fill paired with its dark accent stroke. Note: accent-colored text on a **neutral** canvas is a deliberate category/heading choice and is not flagged — only labels on accent fills are. `auto_refine` does not touch colors; adjust manually.
@@ -206,7 +229,7 @@ For the evaluator to "see" connections, drawing code must register connectable r
 - **Low-level entry**: `drawer.line(..., register_edge=True)` / `drawer.path(..., register_edge=True, start=..., end=...)` can also manually register edges (for curves, `start/end` are the semantic endpoints; `d` can be any path).
 - **`group(transform)` context**: nodes/edges/bboxes drawn inside `with drawer.group("translate(100,50) rotate(30)"):` are registered in **absolute coordinates** via the accumulated affine matrix, so local coordinates inside a group are also validated. Supports chained `matrix()/translate()/scale()/rotate()/skewX()/skewY()`.
 - **Advanced shapes** (ported from ink-graph `shapes.md`, local coordinates via `<g transform>`): `drawer.database(x,y,w,h,...)` (cylinder, top ellipse depth=min(8,h*0.12)), `drawer.decision(...)` (diamond, four points around center), `drawer.hexagon(...)` (gateway, 25% corner insets), `drawer.component(...)` (with left-edge double tabs), `drawer.cloud(...)` (multi-lobe cubic curves). All accept `node_id/role/label`, register nodes consistently with `rect()`/`circle()`, and support connection snapping. Text centering uses `dominant-baseline="central"` (exact, replacing the old y+0.35*fs approximation).
-- **Semantic role `role=`** (optional): `rect/circle/connect/line/path` all accept `role="node|edge|decoration|legend|background"`. Elements set to `decoration`/`legend`/`background` emit a `data-graph-role` attribute and are **excluded from business checks** (spacing, collision, palette count) — used for decorative layers (rail casings, background textures, legends). Default `node`/`edge` means business elements.
+- **Semantic role `role=`** (optional): `rect/circle/connect/line/path` all accept `role="node|edge|decoration|legend|background|layer"`. Elements set to `decoration`/`legend`/`background` emit a `data-graph-role` attribute and are **excluded from business checks** (spacing, collision, palette count) — used for decorative layers (rail casings, background textures, legends). `role="layer"` marks tinted band containers: they emit `data-graph-role="layer"` and are the primary signal for band detection in the design-brief layout check (pair each with a `node_id=` that matches a `palette_role` key). Default `node`/`edge` means business elements.
 - **Math formulas with sub/superscripts**: `drawer.formula(x, y, markup, font_size=, fill=, anchor=, weight=)` renders genuine `<tspan>` baseline shifts — unlike `text()` (which HTML-escapes content and can only show literal underscores/carets). Markup: `_{...}` → subscript, `^{...}` → superscript; baseline auto-resets between tokens so multiple indices align (e.g. `"F_{k} = MS^{↑}_{k} + g_{k}"`). Default monospace family + bold for an equation look; pass `weight="normal"` for inline annotations. The sub/superscript glyph sizes (~0.72×) are derivative of the parent text size and are **excluded from the font-tier count** (see `check_font_scale`), so formulas do not inflate the 3–4-tier typography budget. (Note: `svg2pptx` concatenates `<tspan>` text flat — use image mode if you need exact subscript fidelity in PowerPoint.)
 
 > **"Invisible anchor" anti-pattern (now forcefully blocked)**: it used to be possible to create `fill="none" stroke="none"` invisible rectangles to cheat the connection validation — the evaluator would pass, but the human eye would see dangling lines. Now `check_phantom_anchors()` detects any node referenced by an edge that is invisible (`fill=none ∧ stroke=none`/opacity=0/zero-size) and flags it as FAIL. When you need a "bus rail" or cross-layer channel, use the distinct-port pattern below to connect to a visible junction.
@@ -281,7 +304,7 @@ output/<timestamp>_<name>/
   NAME = "<name>"
   ```
 - **The `<timestamp>_<name>` directory name is frozen at creation** (a born-on date); it is not regenerated on each run.
-- **Always emit the full triplet** — SVG (`save_svg`), PNG (`rasterize_svg`, wraps `rsvg-convert`), and PPTX (`svg2pptx.svg_to_pptx`) — so the directory is self-describing.
+- **Always emit the full quartet** — SVG (`save_svg`), PNG (`rasterize_svg`, wraps `rsvg-convert`), PPTX (`svg2pptx.svg_to_pptx`), and `brief.json` (`BRIEF.write(...)`, the declared design contract) — so the directory is self-describing.
 - **Artifacts are gitignored by extension** (`**/*.svg`, `**/*.png`, `**/*.pptx`); the `gen_*.py` scripts stay version-controlled. Never gitignore the whole output directory — that hides the scripts.
 
 ### The save/rasterize helpers
@@ -393,6 +416,7 @@ All detection/export capabilities parse the actually-rendered SVG (`evaluate, do
 | ⑳ | Text-on-fill contrast (WCAG 2) | `check_contrast`: ratio of each `<text>` fill vs its smallest containing `<rect>` fill — FAIL <3:1, WARN <4.5:1 (AA) / 3:1 large (≥24px / ≥18.5px bold); only accent fills measured, accent text on neutral canvas skipped |
 | ㉑ | Same-kind peer alignment | `check_alignment`: same-sized same-kind nodes in a row/column must share a top/bottom/left/right edge (±5px) or a center line (±15%); differently-sized peers exempt |
 | ㉒ | Semantic QA (`semantic_qa.py`) | Meaning-level smoke check after scoring: dangling marker refs (marker 缺省陷阱, FAIL), defined-but-unused markers (WARN), declared-vs-actual canvas size drift (FIGS 尺寸漂移), label/host mismatch (标签错位), raw rails slicing filled containers or cards (箭头线盖在组件上), text semantics vs spec (placeholder/garbled/empty FAIL; spec-entity coverage <40% FAIL / <85% WARN) — parses the rendered SVG incl. grouped shapes, composite arcs, and stroke widths |
+| ㉓ | Design-brief contract (`design_brief.py` + `check_design_brief`) | Step-1 declared intent as data: `DesignBrief(scheme, layout band|node, flow top-down|left-right|none, palette_role {data-node-id: (fill,stroke)}, flow_chain)`. The rendered SVG is asserted against it — declared tint gone white FAIL, wrong/undeclared paint WARN, empty declared band FAIL, side-band-in-chain chain-broken FAIL, ≥70% inter-layer flow dominance (return edges tolerated), chain degree rules, declared order vs geometry. Absent brief → visible WARN. Capability boundary: verifies rendering ↔ self-declared contract, not contract ↔ user intent |
 
 ## References & Acknowledgments
 
