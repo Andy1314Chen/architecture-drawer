@@ -917,17 +917,255 @@ def check_text_semantics(texts, spec_text, errs, min_coverage=0.4, warn_coverage
             f"{coverage * 100:.0f}% of the spec's component names appear in the "
             f"diagram — consider adding: {', '.join(missing[:8])}",
         ))
+# ---------------------------------------------------------------------------
+# Design-brief contract check (Step-1 declared intent vs rendered output)
+# ---------------------------------------------------------------------------
+_NON_BUSINESS = ("decoration", "legend", "background")
+
+
+def _pnorm(raw):
+    """Normalize a raw fill/stroke attr to a comparable token."""
+    from svg_utils import normalize_color
+    if raw is None:
+        return ""
+    return normalize_color(raw) or str(raw).strip().lower()
+
+
+def _contains(box, px, py, inset=1.0):
+    return (box.x + inset <= px <= box.x + box.w - inset
+            and box.y + inset <= py <= box.y + box.h - inset)
+
+
+def check_design_brief(brief, doc, errs, dominance=0.70):
+    """Assert the RENDERED SVG against the declared DesignBrief (A/B/C).
+
+    A — palette contract: every declared key (data-node-id) must be rendered
+        as a business shape with the declared (fill, stroke) pair; declared
+        tint rendered white/neutral = FAIL (structure lost its color), wrong
+        chromatic tint = WARN, stroke mismatch = WARN; chromatic paints on
+        undeclared business shapes = WARN.
+    B — layout contract: band -> each declared layer container exists
+        (identity via data-node-id) and is non-empty; unmarked layer-role
+        containers = WARN. node -> any layer container rendered = FAIL.
+        Runs on data-graph-role="layer" as corroborating signal; identity is
+        primary.
+    C — flow contract (dominance, not per-edge monotonicity — real diagrams
+        carry return edges): >=70% of inter-layer edges must agree with the
+        declared axis, and the declared first/last/middle layers must satisfy
+        out>=1 / in>=1 / both>=1. Declared layer ORDER must match geometric
+        order. Skipped when B finds no layer basis or flow == "none".
+
+    The 0.70 dominance default tolerates up to ~30% back-edges (a vLLM-style
+    request/response diagram carries real return flows) while still catching
+    inverted or incoherent routing; exposed as a parameter for recalibration.
+    Capability boundary: this verifies rendering <-> SELF-declared contract
+    consistency. A coherently-wrong brief passes; intent is guarded by
+    spec-entity coverage and human review of the brief.
+    """
+    from svg_utils import is_neutral
+    rects, rect_roles, aligned = _dedup_rects(
+        doc["rects"], doc.get("rect_roles"), eps=0.75,
+        aligned={"rect_ids": doc["rect_ids"], "rect_paints": doc["rect_paints"]})
+    rect_ids, rect_paints = aligned["rect_ids"], aligned["rect_paints"]
+    paints = [(_pnorm(p[0]), _pnorm(p[1])) if p else ("", "")
+              for p in rect_paints]
+
+    def business(i):
+        return (rect_roles[i] if i < len(rect_roles) else "") \
+            not in _NON_BUSINESS
+
+    # --- A: palette contract ------------------------------------------------
+    by_id = {}
+    for i, nid in enumerate(rect_ids):
+        if nid:
+            by_id.setdefault(nid, []).append(i)
+    declared_fills = {s.fill for s in brief.palette_role.values()}
+    declared_strokes = {s.stroke for s in brief.palette_role.values()}
+    for key, spec in sorted(brief.palette_role.items()):
+        idxs = [i for i in by_id.get(key, []) if business(i)]
+        if not idxs:
+            errs.append(Issue(
+                "fail", "brief-shape-missing",
+                f"declared palette key '{key}' has no rendered business shape "
+ f"(data-node-id) — declared structure missing from the diagram."))
+            continue
+        for i in idxs:
+            fill, stroke = paints[i]
+            if not is_neutral(spec.fill) and fill in ("", "none", "#ffffff"):
+                errs.append(Issue(
+                    "fail", "brief-tint-lost",
+                    f"declared tint '{key}' rendered with a white/neutral "
+                    f"fill (declared {spec.fill}) — structure lost its color."))
+            elif fill != spec.fill and fill not in ("", "none", "#ffffff"):
+                errs.append(Issue(
+                    "warn", "brief-fill-mismatch",
+                    f"'{key}' rendered fill {fill} != declared {spec.fill}."))
+            if stroke and stroke != spec.stroke and not is_neutral(spec.stroke):
+                errs.append(Issue(
+                    "warn", "brief-stroke-mismatch",
+                    f"'{key}' rendered stroke {stroke} != declared "
+                    f"{spec.stroke}."))
+    for i, (fill, stroke) in enumerate(paints):
+        nid = rect_ids[i] if i < len(rect_ids) else ""
+        if not business(i) or (nid and nid in brief.palette_role):
+            continue
+        if fill and fill not in ("none", "#ffffff") and not is_neutral(fill) \
+                and fill not in declared_fills:
+            errs.append(Issue(
+                "warn", "brief-fill-undeclared",
+                f"chromatic fill {fill} at ({rects[i].x:.0f},"
+                f"{rects[i].y:.0f}) is outside the declared palette."))
+        if stroke and stroke != "none" and not is_neutral(stroke) \
+                and stroke not in declared_strokes:
+            errs.append(Issue(
+                "warn", "brief-stroke-undeclared",
+                f"chromatic stroke {stroke} at ({rects[i].x:.0f},"
+                f"{rects[i].y:.0f}) is outside the declared palette."))
+
+    # --- B: layout contract -------------------------------------------------
+    layer_boxes = {}
+    role_layers = []
+    for i, r in enumerate(rects):
+        nid = rect_ids[i] if i < len(rect_ids) else ""
+        role = rect_roles[i] if i < len(rect_roles) else ""
+        if role == "layer":
+            role_layers.append((nid, r))
+        if brief.layout == "band" and nid and nid in brief.layers:
+            cur = layer_boxes.get(nid)
+            if cur is None or r.w * r.h < cur.w * cur.h:
+                layer_boxes[nid] = r
+    if brief.layout == "band":
+        for nid, r in role_layers:
+            if not nid or nid not in brief.layers:
+                errs.append(Issue(
+                    "warn", "brief-layer-undeclared",
+                    f"layer container at ({r.x:.0f},{r.y:.0f}, {r.w:.0f}x"
+                    f"{r.h:.0f}) is not declared in the brief palette."))
+        declared_set = set(brief.layers)
+        for k in brief.layers:
+            box = layer_boxes.get(k)
+            if box is None:
+                continue          # already FAILed by A (shape missing)
+            # business-node predicate: not decoration/legend/background, not
+            # itself a declared layer container
+            n = sum(
+                1 for i, r in enumerate(rects)
+                if business(i) and rect_ids[i] not in declared_set
+                and _contains(box, r.x + r.w / 2, r.y + r.h / 2))
+            if n == 0:
+                errs.append(Issue(
+                    "fail", "brief-layer-empty",
+                    f"declared layer '{k}' renders empty — no business node "
+                    f"inside its container."))
+    else:  # node style
+        for nid, r in role_layers:
+            errs.append(Issue(
+                "fail", "brief-layout-contradicted",
+                f"node-style brief but a layer container is rendered at "
+                f"({r.x:.0f},{r.y:.0f}) — layout contradicts the contract."))
+
+    # --- C: flow contract (skipped without a structural basis) --------------
+    if brief.flow == "none":
+        return
+    if brief.layout == "band" and not layer_boxes:
+        return          # short-circuit: B's basis is gone; C would be noise
+    edges = [(p1, p2) for p1, p2, role in doc["edge_specs"]
+             if role not in _NON_BUSINESS]
+
+    def layer_of(pt):
+        best, best_area = None, None
+        for idx, k in enumerate(brief.layers):
+            box = layer_boxes.get(k)
+            if box and _contains(box, pt[0], pt[1], inset=0.0):
+                area = box.w * box.h
+                if best is None or area < best_area:
+                    best, best_area = idx, area
+        return best
+
+    if brief.layout == "band" and len(brief.layers) >= 2:
+        # declared order must match geometric order along the flow axis
+        axes = [layer_boxes[k].y + layer_boxes[k].h / 2
+                if k in layer_boxes else None for k in brief.layers]
+        known = [a for a in axes if a is not None]
+        vertical = brief.flow == "top-down"
+        if not vertical:
+            axes = [layer_boxes[k].x + layer_boxes[k].w / 2
+                    if k in layer_boxes else None for k in brief.layers]
+            known = [a for a in axes if a is not None]
+        if any(a > b for a, b in zip(known, known[1:])):
+            errs.append(Issue(
+                "fail", "brief-layer-order",
+                "declared layer order contradicts the rendered geometry "
+                "(containers not monotonic along the flow axis)."))
+        inter = []
+        for p1, p2 in edges:
+            a, b = layer_of(p1), layer_of(p2)
+            if a is None or b is None or a == b:
+                continue
+            inter.append((a, b, p1, p2))
+        if len(inter) >= 4:
+            m = sum(
+                1 for a, b, p1, p2 in inter
+                if (p2[1] - p1[1] if vertical else p2[0] - p1[0]) > 0)
+            if m / len(inter) < dominance:
+                errs.append(Issue(
+                    "fail", "brief-flow-dominance",
+                    f"only {100 * m / len(inter):.0f}% of inter-layer edges "
+                    f"follow the declared '{brief.flow}' flow (< "
+                    f"{dominance * 100:.0f}%) — routing is inverted or "
+                    f"incoherent with the contract."))
+        outs = [0] * len(brief.layers)
+        ins = [0] * len(brief.layers)
+        for a, b, p1, p2 in inter:
+            outs[a] += 1
+            ins[b] += 1
+        last = len(brief.layers) - 1
+        for i, k in enumerate(brief.layers):
+            if k not in layer_boxes:
+                continue
+            if i == 0 and outs[i] < 1:
+                errs.append(Issue(
+                    "fail", "brief-chain-broken",
+                    f"first declared layer '{k}' has no outgoing "
+                    f"inter-layer edge."))
+            elif i == last and ins[i] < 1:
+                errs.append(Issue(
+                    "fail", "brief-chain-broken",
+                    f"last declared layer '{k}' has no incoming "
+                    f"inter-layer edge."))
+            elif 0 < i < last and (outs[i] < 1 or ins[i] < 1):
+                errs.append(Issue(
+                    "fail", "brief-chain-broken",
+                    f"middle declared layer '{k}' breaks the chain "
+                    f"(in={ins[i]}, out={outs[i]})."))
+    elif edges:
+        # node style: whole-edge direction dominance only, no degree rules
+        m = sum(1 for p1, p2 in edges
+                if (p2[1] - p1[1] if brief.flow == "top-down"
+                    else p2[0] - p1[0]) > 0)
+        n = sum(1 for p1, p2 in edges
+                if (p2[1] - p1[1] if brief.flow == "top-down"
+                    else p2[0] - p1[0]) != 0)
+        if n >= 4 and m / n < dominance:
+            errs.append(Issue(
+                "fail", "brief-flow-dominance",
+                f"only {100 * m / n:.0f}% of edges follow the declared "
+                f"'{brief.flow}' flow (< {dominance * 100:.0f}%)."))
 
 
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 def run_semantic_qa(drawable, expected_size: Optional[tuple] = None,
-                   spec_text: Optional[str] = None) -> SemanticResult:
+                   spec_text: Optional[str] = None,
+                   brief=None) -> SemanticResult:
     """Analyze a drawer (.render()) or a raw SVG string.
 
     spec_text: the original requirement text (e.g. input.md). When given,
     text-semantics checks entity coverage of the diagram against the spec.
+    brief: a DesignBrief (or None). Given, the rendered SVG is asserted
+    against the declared contract (check_design_brief). Absent, a WARN is
+    raised — an undeclared brief is visible, not silently skipped.
     """
     svg = drawable.render() if hasattr(drawable, "render") else str(drawable)
     doc = _collect(svg)
@@ -939,6 +1177,17 @@ def run_semantic_qa(drawable, expected_size: Optional[tuple] = None,
     check_labels(ch, rects, doc["circles"], doc["segments"], doc["texts"], errs)
     check_connector_routes(rects, rect_roles, doc["circles"], doc["segments"], errs)
     check_text_semantics(doc["texts"], spec_text, errs)
+    if brief is None:
+        errs.append(Issue(
+            "warn", "brief-absent",
+            "no design brief declared (DesignBrief / brief.json) — palette/"
+            "layout/flow contract checks skipped. gen.py should declare "
+            "BRIEF = DesignBrief(...) and pass brief=BRIEF."))
+    else:
+        from design_brief import DesignBrief
+        if not isinstance(brief, DesignBrief):
+            brief = DesignBrief.from_dict(brief)
+        check_design_brief(brief, doc, errs)
     return SemanticResult(issues=errs)
 
 
