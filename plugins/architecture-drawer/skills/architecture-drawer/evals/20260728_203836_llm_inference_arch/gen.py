@@ -27,6 +27,8 @@ if _SKILL not in sys.path:
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from svg2pptx import svg_to_pptx
 from evaluator import evaluate_svg, auto_refine
+from design_brief import DesignBrief, ColorSpec
+from semantic_qa import run_semantic_qa
 
 OUT = Path(__file__).resolve().parent
 NAME = "llm_inference_arch"
@@ -181,7 +183,7 @@ for i, (nid, t, d) in enumerate([
 
 # ===== L5 Storage & Interconnect ==========================================
 drawer.rect(70, 858, 360, 98, rx=8, ry=8, fill=AMBER_F, stroke=AMBER_S,
-            stroke_width=1.4, role="layer", bbox=False)
+            stroke_width=1.4, node_id="storage_box", role="layer", bbox=False)
 drawer.text(250, 876, "\u5b58\u50a8\u5c42\u7ea7 Storage", 12, fill=INK, weight="bold", bbox=False)
 for i, line in enumerate([
     "HBM \u663e\u5b58\uff1a\u6743\u91cd + \u6d3b\u8dc3 KV Cache",
@@ -198,7 +200,7 @@ drawer.rect(500, 912, 300, 34, rx=5, ry=5, fill=CARD_F, stroke=CARD_S,
 drawer.text(650, 929, "InfiniBand/RoCE \u8de8\u8282\u70b9\uff08PP/RDMA\uff09", 10, fill=INK, bbox=False)
 
 drawer.rect(880, 858, 400, 98, rx=8, ry=8, fill=AMBER_F, stroke=AMBER_S,
-            stroke_width=1.4, role="layer", bbox=False)
+            stroke_width=1.4, node_id="gpu_cluster", role="layer", bbox=False)
 drawer.text(1080, 876, "GPU \u8282\u70b9\u96c6\u7fa4\uff088\u00d7A100/H100\uff09", 12, fill=INK, weight="bold", bbox=False)
 for i in range(4):
     gx = 910 + i * 90
@@ -261,9 +263,47 @@ if score < 100:
     for line in report:
         print(line)
 
+# ---- design brief (Step 1) --------------------------------------------------
+# Declared from input.md's intent: seven numbered bands ①–⑦ stacked top-down
+# (gateway -> scheduler -> engine -> parallelism -> storage -> optimizers ->
+# disaggregated) on a downward request spine; palette grouped by concern
+# (blue/teal/amber/purple = S2 categorical, per the design-system budget
+# input.md delegates to). The nested ③ worker containers draw white with the
+# teal STROKE carrying the color; ⑤ repeats the amber pair on its storage /
+# GPU-cluster containers. The spine arrows link band borders across the
+# gutters and the marker-tip retraction lands every endpoint between bands,
+# so no inter-layer edge attributes to the next band — a declared chain would
+# false-FAIL (same gutter-spine situation as the pi_agent / mlir evals).
+BRIEF = DesignBrief(
+    scheme="S2",
+    layout="band",
+    flow="top-down",
+    palette_role={
+        "band1":       ColorSpec(BLUE_F, BLUE_S),
+        "band2":       ColorSpec(BLUE_F, BLUE_S),
+        "band3":       ColorSpec(TEAL_F, TEAL_S),
+        "band4":       ColorSpec(TEAL_F, TEAL_S),
+        "band5":       ColorSpec(AMBER_F, AMBER_S),
+        "band6":       ColorSpec(PURP_F, PURP_S),
+        "band7":       ColorSpec(PURP_F, PURP_S),
+        "prefill_box": ColorSpec("#FFFFFF", TEAL_S),
+        "decode_box":  ColorSpec("#FFFFFF", TEAL_S),
+        "storage_box": ColorSpec(AMBER_F, AMBER_S),
+        "gpu_cluster": ColorSpec(AMBER_F, AMBER_S),
+    },
+    flow_chain=("band1", "band2", "band3", "band4", "band5", "band6", "band7"),
+)
+
+print("Quality Score: %d" % score)
+qa = run_semantic_qa(drawer, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
+    print(line)
+
 svg = drawer.render()
 save_svg(svg, str(OUT / f"{NAME}.svg"))
 rasterize_svg(str(OUT / f"{NAME}.svg"), str(OUT / f"{NAME}.png"), width=W)
 svg_to_pptx(svg, str(OUT / f"{NAME}.pptx"))
 print(f"\nFinal score: {score}")
 print(f"Wrote triplet to {OUT}")
+BRIEF.write(str(OUT / "brief.json"))

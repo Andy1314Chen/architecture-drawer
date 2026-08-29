@@ -25,6 +25,8 @@ if _SKILL not in sys.path:
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from evaluator import evaluate_svg
 from svg2pptx import svg_to_pptx
+from design_brief import DesignBrief, ColorSpec
+from semantic_qa import run_semantic_qa
 
 OUT = Path(__file__).resolve().parent
 NAME = "llama_cpp_arch"
@@ -166,13 +168,40 @@ flow("sv_routes", "sv_queue")
 flow("sv_queue", "sv_ctx")
 flow("sv_ctx", "sv_resp")
 
+# ============================================================ Design Brief
+# Declared from input.md's intent: Section 1 defines the four stacked Core
+# Library layer bands (Model / Execution / Graph / Backend) as a top-down
+# dependency/abstraction stack ("top depends on those below", arrows linking
+# each band to the one beneath) -> band layout, vertical flow axis, palette
+# from the S2 Okabe-Ito layer tints. The chain stays EMPTY: the dependency
+# spine snaps band-border to band-border, and the arrowhead retraction leaves
+# the path end in the 20px gutter (outside the target band box), so the
+# contract checker cannot attribute those edges as inter-layer stages -- an
+# unverifiable chain is not declared. The Inference Flow and Server sections
+# are runtime-process panels (neutral gray, background role), not tinted
+# library bands, so they stay outside the band contract.
+BRIEF = DesignBrief(
+    scheme="S2",
+    layout="band",
+    flow="top-down",
+    palette_role={nid: ColorSpec(fill, stroke)
+                  for nid, (_label, fill, stroke) in zip(NODE_IDS, LAYERS)},
+    flow_chain=("L_model", "L_exec", "L_graph", "L_backend"),
+)
+
 # ============================================================ evaluate + save
 score, report = evaluate_svg(drawer)
 print(f"Quality Score: {score}")
 for line in report:
     print(line)
 
+qa = run_semantic_qa(drawer, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
+    print(line)
+
 save_svg(drawer.render(), str(OUT / f"{NAME}.svg"))
 rasterize_svg(str(OUT / f"{NAME}.svg"), str(OUT / f"{NAME}.png"), width=W)
 svg_to_pptx(drawer.render(), OUT / f"{NAME}.pptx")
+BRIEF.write(str(OUT / "brief.json"))
 print("Saved triplet to", OUT)

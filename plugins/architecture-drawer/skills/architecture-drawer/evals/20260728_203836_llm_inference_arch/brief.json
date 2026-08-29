@@ -1,0 +1,60 @@
+{
+  "scheme": "S2",
+  "layout": "band",
+  "flow": "top-down",
+  "flow_chain": [
+    "band1",
+    "band2",
+    "band3",
+    "band4",
+    "band5",
+    "band6",
+    "band7"
+  ],
+  "palette_role": {
+    "band1": {
+      "fill": "#dae8fc",
+      "stroke": "#2e5aac"
+    },
+    "band2": {
+      "fill": "#dae8fc",
+      "stroke": "#2e5aac"
+    },
+    "band3": {
+      "fill": "#b2e2e2",
+      "stroke": "#2e8b8b"
+    },
+    "band4": {
+      "fill": "#b2e2e2",
+      "stroke": "#2e8b8b"
+    },
+    "band5": {
+      "fill": "#ffe6cc",
+      "stroke": "#d79b00"
+    },
+    "band6": {
+      "fill": "#e1d5e7",
+      "stroke": "#9673a6"
+    },
+    "band7": {
+      "fill": "#e1d5e7",
+      "stroke": "#9673a6"
+    },
+    "prefill_box": {
+      "fill": "#ffffff",
+      "stroke": "#2e8b8b"
+    },
+    "decode_box": {
+      "fill": "#ffffff",
+      "stroke": "#2e8b8b"
+    },
+    "storage_box": {
+      "fill": "#ffe6cc",
+      "stroke": "#d79b00"
+    },
+    "gpu_cluster": {
+      "fill": "#ffe6cc",
+      "stroke": "#d79b00"
+    }
+  }
+}

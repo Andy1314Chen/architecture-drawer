@@ -22,6 +22,8 @@ if _SKILL not in sys.path:
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from svg2pptx import svg_to_pptx, PptxConfig
 from evaluator import evaluate_svg
+from design_brief import DesignBrief, ColorSpec
+from semantic_qa import run_semantic_qa
 
 from pathlib import Path
 
@@ -225,12 +227,49 @@ e = d.connect("smoke_ok", "left", "failed", "right", stroke=EDGE,
               stroke_width=1.8, marker_end="ah")
 yes_no(e[0], e[1], "否 No")
 
+# --- Design Brief (Step 1) — declared from input.md's flowchart intent ----
+# Node-style: every stage is a tinted flowchart-role shape (no layer
+# containers). Palette keys = the primary node ids on the center spine
+# (start -> released, input.md's numbered stage list) plus the failure
+# column (notify + the gray junction merges + failed). flow = top-down per
+# input.md's "top-to-bottom process flowchart" spine; node-style briefs
+# carry no chain (check C asserts whole-edge direction dominance).
+BRIEF = DesignBrief(
+    scheme="flowchart-roles",
+    layout="node",
+    flow="top-down",
+    palette_role={
+        "start":     ColorSpec(GRN_F, GRN_S),   # green terminator
+        "hook":      ColorSpec(ORG_F, ORG_S),   # orange I/O hexagon
+        "checkout":  ColorSpec(PUR_F, PUR_S),   # purple subprocess
+        "build_ok":  ColorSpec(YEL_F, YEL_S),   # yellow decision
+        "lint":      ColorSpec(PUR_F, PUR_S),
+        "lint_ok":   ColorSpec(YEL_F, YEL_S),
+        "tests":     ColorSpec(PUR_F, PUR_S),
+        "test_ok":   ColorSpec(YEL_F, YEL_S),
+        "staging":   ColorSpec(BLU_F, BLU_S),   # blue process
+        "smoke":     ColorSpec(BLU_F, BLU_S),
+        "smoke_ok":  ColorSpec(YEL_F, YEL_S),
+        "deploy":    ColorSpec(BLU_F, BLU_S),
+        "released":  ColorSpec(GRN_F, GRN_S),
+        "notify":    ColorSpec(BLU_F, BLU_S),   # failure column
+        "m1":        ColorSpec(JCT_F, JCT_S),   # gray junction merges
+        "m2":        ColorSpec(JCT_F, JCT_S),
+        "failed":    ColorSpec(GRN_F, GRN_S),
+    },
+    flow_chain=(),
+)
+
 # --- score + artifact triplet -------------------------------------------
 svg = d.render()
 score, rep = evaluate_svg(d)
 print(f"Score: {score}")
 for r in rep:
     print(f"  {r}")
+qa = run_semantic_qa(d, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
+    print(line)
 sp = str(OUT / f"{NAME}.svg")
 save_svg(svg, sp)
 rasterize_svg(sp, str(OUT / f"{NAME}.png"), width=PNG_W)
@@ -239,4 +278,5 @@ try:
                 config=PptxConfig(slide_w=13.333, slide_h=7.5, scale=2.0))
 except Exception as e:
     print(f"[pptx: {e}]")
+BRIEF.write(str(OUT / "brief.json"))
 print(f"\n✓ {NAME}.svg / .png / .pptx")

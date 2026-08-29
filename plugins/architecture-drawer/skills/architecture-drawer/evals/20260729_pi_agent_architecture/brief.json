@@ -1,0 +1,32 @@
+{
+  "scheme": "S1",
+  "layout": "band",
+  "flow": "top-down",
+  "flow_chain": [],
+  "palette_role": {
+    "interface": {
+      "fill": "#d5e1eb",
+      "stroke": "#1b3a5c"
+    },
+    "coding_agent": {
+      "fill": "#bbcedf",
+      "stroke": "#1b3a5c"
+    },
+    "agent_core": {
+      "fill": "#9bb9d1",
+      "stroke": "#1b3a5c"
+    },
+    "ai_abstraction": {
+      "fill": "#769ebf",
+      "stroke": "#1b3a5c"
+    },
+    "llm_api": {
+      "fill": "#aac8de",
+      "stroke": "#1b3a5c"
+    },
+    "event_seq": {
+      "fill": "#eeeeee",
+      "stroke": "#b0b0b0"
+    }
+  }
+}

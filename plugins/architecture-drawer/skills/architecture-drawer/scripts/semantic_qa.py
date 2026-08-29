@@ -1072,12 +1072,15 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
         return          # short-circuit: no chain declared; C would be noise
     edges = [(p1, p2) for p1, p2, role in doc["edge_specs"]
              if role not in _NON_BUSINESS]
-
     def layer_of(pt):
         best, best_area = None, None
         for idx, k in enumerate(brief.layers):
             box = layer_boxes.get(k)
-            if box and _contains(box, pt[0], pt[1], inset=0.0):
+            # inset=-4: expand the container by 4px so endpoints snapped to
+            # band borders still attribute correctly — connect() retracts
+            # arrow tips by marker_tip_depth (~1.5px), which lands the
+            # endpoint just OUTSIDE the target band in the gutter.
+            if box and _contains(box, pt[0], pt[1], inset=-4.0):
                 area = box.w * box.h
                 if best is None or area < best_area:
                     best, best_area = idx, area

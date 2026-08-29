@@ -1,0 +1,32 @@
+{
+  "scheme": "S2",
+  "layout": "node",
+  "flow": "none",
+  "flow_chain": [],
+  "palette_role": {
+    "comm1": {
+      "fill": "#dbeafe",
+      "stroke": "#2563eb"
+    },
+    "geo_relay": {
+      "fill": "#dbeafe",
+      "stroke": "#2563eb"
+    },
+    "meo1": {
+      "fill": "#dcfce7",
+      "stroke": "#16a34a"
+    },
+    "src": {
+      "fill": "#ffedd5",
+      "stroke": "#ea580c"
+    },
+    "station": {
+      "fill": "#e2e8f0",
+      "stroke": "#475569"
+    },
+    "gs3": {
+      "fill": "#ffffff",
+      "stroke": "#475569"
+    }
+  }
+}

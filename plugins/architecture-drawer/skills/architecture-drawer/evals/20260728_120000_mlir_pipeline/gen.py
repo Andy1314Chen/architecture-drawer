@@ -10,6 +10,8 @@ if _SKILL not in sys.path:
     sys.path.insert(0, _SKILL)
 from svg_utils import SVGDrawer, save_svg, rasterize_svg, BBox
 from evaluator import evaluate_svg
+from design_brief import DesignBrief, ColorSpec
+from semantic_qa import run_semantic_qa
 
 # Script co-located with its SVG/PNG/PPTX in this dir (output/<ts>_<name>/).
 NAME = "mlir_pipeline"
@@ -79,7 +81,8 @@ txt(W / 2, 54, "Static Graph Optimization → Runtime Scheduling → Hardware Co
     12, GRAY_D, "middle")
 
 # =================== BAND 1 : GRAPH OPTIMIZATION ===================
-rrect(50, 64, 1340, 266, "#FCFCFC", PURPLE, 2, 12, role="background")
+rrect(50, 64, 1340, 266, "#FCFCFC", PURPLE, 2, 12,
+      extra='data-node-id="graph_opt"', role="layer")
 txt(72, 92, "Graph Optimization — Compile-time · Static DAG & Fusion", 14, PURPLE, "start", "bold")
 txt(72, 110, "Operator fusion · algebraic reordering · parallel-branch detection", 12, GRAY_D, "start")
 
@@ -134,7 +137,8 @@ d.add_element(
 txt(298, 248, "fuses", 10, ORANGE, "start")
 
 # =================== BAND 2 : RUNTIME SCHEDULING ===================
-rrect(50, 340, 1340, 235, "#FCFCFC", BLUE, 2, 12, role="background")
+rrect(50, 340, 1340, 235, "#FCFCFC", BLUE, 2, 12,
+      extra='data-node-id="runtime_sched"', role="layer")
 txt(72, 368, "Runtime Scheduling — Async Launch · Priority · Load Balance", 14, BLUE, "start", "bold")
 txt(72, 386, "Host launch / device-exec split · work stealing for dynamic shapes", 12, GRAY_D, "start")
 
@@ -181,7 +185,8 @@ card(870, 398 + h1 + 12, 510, "Back-pressure & Amortization",
      "Device queues throttle host when saturated; CUDA-graph capture amortizes per-kernel launch overhead", GRAY_S)
 
 # =================== BAND 3 : HARDWARE CONCURRENCY ===================
-rrect(50, 585, 1340, 340, "#FCFCFC", ORANGE, 2, 12, role="background")
+rrect(50, 585, 1340, 340, "#FCFCFC", ORANGE, 2, 12,
+      extra='data-node-id="hw_concurrency"', role="layer")
 txt(72, 613, "Hardware Concurrency — Multi-Stream Overlap · SM Partition", 14, ORANGE, "start", "bold")
 txt(72, 631, "GPU SM array · timeline swimlanes · MPS / MIG spatial multiplexing", 12, GRAY_D, "start")
 
@@ -246,7 +251,8 @@ for xx in [430, 680]:
 txt(555, 902, "↕ fully concurrent · Multi-Stream Overlap", 10, ORANGE, "middle", "bold")
 
 # =================== BAND 4 : MEMORY POOL ===================
-rrect(50, 935, 1340, 235, "#FCFCFC", YELLOW, 2, 12, role="background")
+rrect(50, 935, 1340, 235, "#FCFCFC", YELLOW, 2, 12,
+      extra='data-node-id="mem_pool"', role="layer")
 txt(72, 963, "Memory Pool — Lifetime · In-place · Workspace Reuse", 14, YELLOW, "start", "bold")
 txt(72, 981, "Ring buffer · producer→consumer L2 locality", 12, GRAY_D, "start")
 
@@ -299,10 +305,39 @@ for yy, vb in [(330, "lowers"), (575, "dispatches"), (925, "reclaims")]:
         f'data-graph-role="decoration"/>')
     txt(SPX + 16, yy + 7, vb, 10, GRAY_S, "start")
 
+# =================== DESIGN BRIEF (Step 1) ===================
+# Declared from input.md's matrix intent: 4 horizontal layer bands (the
+# matrix rows) stacking top -> bottom, one hue per concern (graph ops /
+# scheduling / hardware / memory) — S2 categorical semantics. The bands are
+# palette members; the intra-band tinted containers (task scheduler + the
+# three device streams) are members too. flow_chain stays empty: the numbered
+# spine and gutter verbs linking the bands are decorative annotations, and no
+# business edge crosses a band boundary, so no chain is assertable.
+BRIEF = DesignBrief(
+    scheme="S2",
+    layout="band",
+    flow="top-down",
+    palette_role={
+        "graph_opt":       ColorSpec("#FCFCFC", PURPLE),
+        "runtime_sched":   ColorSpec("#FCFCFC", BLUE),
+        "hw_concurrency":  ColorSpec("#FCFCFC", ORANGE),
+        "mem_pool":        ColorSpec("#FCFCFC", YELLOW),
+        "sched":           ColorSpec(BLUE_F, BLUE),
+        "s0":              ColorSpec(BLUE_F, BLUE),
+        "s1":              ColorSpec(ORANGE_F, ORANGE),
+        "s2":              ColorSpec(GREEN_F, GREEN),
+    },
+    flow_chain=(),
+)
+
 # =================== EVALUATE & SAVE ===================
 score, report = evaluate_svg(d, conn_tolerance=12.0)
 print(f"Score: {score}")
 for line in report:
+    print(line)
+qa = run_semantic_qa(d, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
     print(line)
 svg_path = OUT / f"{NAME}.svg"
 png_path = OUT / f"{NAME}.png"
@@ -311,4 +346,5 @@ save_svg(d.render(), str(svg_path))
 rasterize_svg(svg_path, png_path, W)
 from svg2pptx import svg_to_pptx
 svg_to_pptx(str(svg_path), str(pptx_path))
+BRIEF.write(str(OUT / "brief.json"))
 print(f"Saved triplet -> {OUT}")

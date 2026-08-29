@@ -1,0 +1,29 @@
+{
+  "scheme": "S2",
+  "layout": "band",
+  "flow": "top-down",
+  "flow_chain": [
+    "L_model",
+    "L_exec",
+    "L_graph",
+    "L_backend"
+  ],
+  "palette_role": {
+    "L_model": {
+      "fill": "#faeed1",
+      "stroke": "#e69f00"
+    },
+    "L_exec": {
+      "fill": "#e1f2fb",
+      "stroke": "#56b4e9"
+    },
+    "L_graph": {
+      "fill": "#d1eee6",
+      "stroke": "#009e73"
+    },
+    "L_backend": {
+      "fill": "#d1e6f1",
+      "stroke": "#0072b2"
+    }
+  }
+}

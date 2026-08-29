@@ -10,6 +10,8 @@ if _SKILL not in sys.path:
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from evaluator import evaluate_svg
 from svg2pptx import svg_to_pptx, PptxConfig
+from design_brief import DesignBrief, ColorSpec  # noqa: E402
+from semantic_qa import run_semantic_qa  # noqa: E402
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent
@@ -38,6 +40,8 @@ layers = [
     ("③ 智能体核心层 · pi-agent-core",    "@earendil-works/pi-agent-core",   3, 205),
     ("④ AI 抽象层 · pi-ai",              "@earendil-works/pi-ai",          3, 206),
 ]
+# Brief palette keys for the four layer bands (identity for the contract).
+LAYER_IDS = ["interface", "coding_agent", "agent_core", "ai_abstraction"]
 
 ly = 52; all_pos = []
 for label, pkg, n, cw in layers:
@@ -48,9 +52,9 @@ for label, pkg, n, cw in layers:
 LLMY = ly + 4; LLMH = 40
 INFY = LLMY + LLMH + GAP; INFH = 76
 
-def draw_layer(y, lh, cw, ncomp, label, pkg, idx):
+def draw_layer(y, lh, cw, ncomp, label, pkg, idx, nid=None):
     fill = LB[idx % 4]
-    d.rect(LX, y, LW, lh, rx=11, fill=fill, stroke=SK, stroke_width=1.5)
+    d.rect(LX, y, LW, lh, rx=11, fill=fill, stroke=SK, stroke_width=1.5, node_id=nid)
     d.text(LX+16, y+HH//2, label, font_size=F[1], weight="bold", fill=SK, anchor="start", bbox=BB)
     d.line(LX+12, y+HH, LX+LW-12, y+HH, stroke=SK, stroke_width=0.6)
     if pkg:
@@ -62,7 +66,7 @@ def draw_layer(y, lh, cw, ncomp, label, pkg, idx):
         d.rect(cx, cy0, cw, CH, rx=7, fill=WH, stroke=SK, stroke_width=1)
 
 for idx, (y, lh, cw, ncomp, label, pkg) in enumerate(all_pos):
-    draw_layer(y, lh, cw, ncomp, label, pkg, idx)
+    draw_layer(y, lh, cw, ncomp, label, pkg, idx, LAYER_IDS[idx])
 
 # Labels INSIDE component rects
 def clab(lx, ty, title, sub=""):
@@ -104,12 +108,12 @@ for j, (t, s) in enumerate([("OpenAI","GPT-4o · o3"),("Anthropic","Claude 3.5/4
     clab(LX+gap3+j*(cw3+gap3)+cw3//2, cy3, t, s)
 
 # LLM box
-d.rect(LX, LLMY, LW, LLMH, rx=9, fill=LF, stroke=SK, stroke_width=1.5, dashed="6,4")
+d.rect(LX, LLMY, LW, LLMH, rx=9, fill=LF, stroke=SK, stroke_width=1.5, dashed="6,4", node_id="llm_api")
 d.text(LX+LW//2, LLMY+LLMH//2+1, "LLM API · OpenAI / Anthropic / Google 统一流式调用",
        font_size=F[2], anchor="middle", weight="bold", fill=SK, bbox=BB)
 
 # Info box
-d.rect(LX, INFY, LW, INFH, rx=9, fill="#EEEEEE", stroke="#B0B0B0", stroke_width=1)
+d.rect(LX, INFY, LW, INFH, rx=9, fill="#EEEEEE", stroke="#B0B0B0", stroke_width=1, node_id="event_seq")
 d.text(LX+18, INFY+18, "事件序列示例（一次 prompt（）调用）：", font_size=F[2], weight="bold", fill=TX[0], anchor="start", bbox=BB)
 yy = INFY+38
 for a, b in [("agam_start → turn_start → message_start … message_end →","→ 回合开始，消息流式生成"),
@@ -143,14 +147,40 @@ mx = LX+LW+56
 d.text(mx, ty-14, "工具执行", font_size=F[3], fill=TX[1], anchor="middle", bbox=BB)
 d.text(mx, ty+17, "Bash · 文件操作", font_size=10, fill="#888", anchor="middle", bbox=BB)
 
+# Design Brief (Step 1) — declared from input.md's band structure; the
+# contract the rendered SVG is asserted against. The four package bands plus
+# the LLM API box are palette members; event_seq is a text-only band (the
+# event-lifecycle example). Both spines are antiparallel (request down /
+# AgentEvent up) and terminate in the gutters, so no chain is declared.
+BRIEF = DesignBrief(
+    scheme="S1",
+    layout="band",
+    flow="top-down",
+    palette_role={
+        "interface":      ColorSpec(LB[0], SK),
+        "coding_agent":   ColorSpec(LB[1], SK),
+        "agent_core":     ColorSpec(LB[2], SK),
+        "ai_abstraction": ColorSpec(LB[3], SK),
+        "llm_api":        ColorSpec(LF, SK),
+        "event_seq":      ColorSpec("#EEEEEE", "#B0B0B0"),
+    },
+    flow_chain=(),
+)
+
 svg = d.render()
 score, rep = evaluate_svg(d)
 print(f"Score: {score}")
 for r in rep: print(f"  {r}")
+qa = run_semantic_qa(d, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
+    print(line)
+
 sp = str(OUT/f"{NAME}.svg")
 save_svg(svg, sp)
 rasterize_svg(sp, str(OUT/f"{NAME}.png"), width=1260)
 try:
     svg_to_pptx(svg, str(OUT/f"{NAME}.pptx"), config=PptxConfig(slide_w=13.333, slide_h=7.5, scale=2.0))
 except Exception as e: print(f"[pptx: {e}]")
+BRIEF.write(str(OUT / "brief.json"))
 print(f"\n✓ {NAME}.svg / .png /.pptx")

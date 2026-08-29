@@ -22,6 +22,8 @@ if _SKILL not in sys.path:
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from evaluator import evaluate_svg
 from svg2pptx import svg_to_pptx, PptxConfig
+from design_brief import DesignBrief, ColorSpec
+from semantic_qa import run_semantic_qa
 
 OUT = Path(__file__).resolve().parent
 NAME = "satellite_arch"
@@ -229,14 +231,46 @@ d.text(CX0 + 4, 987,
        "数据通路：  遥感星 → 高轨中继（天链） → 地面站；星座内部及层间由星间链路互联。",
        F_BODY, fill=BLACK, anchor="start", bbox=False)
 
+# ---------------- Design Brief (Step 1) ----------------
+# Declared from input.md's intent. The orbit-altitude bands are neutral
+# background zones (gray fills, role="background"): the diagram's structural
+# color is the horizontal FUNCTIONAL code carried by the satellites
+# themselves (blue=comm/relay, green=nav, orange=sensing/research,
+# slate=manned/platform) -> node-style brief whose palette keys are primary
+# nodes: the validated relay chain 遥感数据源→GEO中继(天链)→地面控制中心
+# plus one representative of each remaining hue family (LEO comm mesh,
+# MEO navigation, 天宫 station). Flow: input.md's connectors are a link-style
+# mesh ("a mesh, not a flow") and an up-then-down relay path that is monotonic
+# on neither axis -- no dominant flow direction -> flow="none", empty chain.
+BRIEF = DesignBrief(
+    scheme="S2",
+    layout="node",
+    flow="none",
+    palette_role={
+        "comm1":     ColorSpec(BLUE_F, BLUE),     # LEO comm constellation
+        "geo_relay": ColorSpec(BLUE_F, BLUE),     # GEO data relay (天链)
+        "meo1":      ColorSpec(GREEN_F, GREEN),   # MEO navigation
+        "src":       ColorSpec(ORANGE_F, ORANGE),  # remote-sensing source
+        "station":   ColorSpec(SLATE_F, SLATE),   # 天宫 manned station
+        "gs3":       ColorSpec("#FFFFFF", SLATE),  # ground control center
+    },
+    flow_chain=(),
+)
+
 # ---------------- Evaluate + render ----------------
 score, report = evaluate_svg(d)
 print(f"Quality Score: {score}")
 for line in report:
     print(line)
 
+qa = run_semantic_qa(d, expected_size=(W, Hh), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
+    print(line)
+
 save_svg(d.render(), str(OUT / f"{NAME}.svg"))
 rasterize_svg(str(OUT / f"{NAME}.svg"), str(OUT / f"{NAME}.png"), width=1400)
 svg_to_pptx(str(OUT / f"{NAME}.svg"), str(OUT / f"{NAME}.pptx"),
             config=PptxConfig(slide_w=13.333, slide_h=11.25, scale=1.0))
+BRIEF.write(str(OUT / "brief.json"))
 print("Done.")

@@ -1,0 +1,40 @@
+{
+  "scheme": "S2",
+  "layout": "band",
+  "flow": "top-down",
+  "flow_chain": [],
+  "palette_role": {
+    "graph_opt": {
+      "fill": "#fcfcfc",
+      "stroke": "#9673a6"
+    },
+    "runtime_sched": {
+      "fill": "#fcfcfc",
+      "stroke": "#2e5aac"
+    },
+    "hw_concurrency": {
+      "fill": "#fcfcfc",
+      "stroke": "#b45f06"
+    },
+    "mem_pool": {
+      "fill": "#fcfcfc",
+      "stroke": "#d6b656"
+    },
+    "sched": {
+      "fill": "#dae8fc",
+      "stroke": "#2e5aac"
+    },
+    "s0": {
+      "fill": "#dae8fc",
+      "stroke": "#2e5aac"
+    },
+    "s1": {
+      "fill": "#ffcc99",
+      "stroke": "#b45f06"
+    },
+    "s2": {
+      "fill": "#d5e8d4",
+      "stroke": "#82b366"
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "scheme": "flowchart-roles",
+  "layout": "node",
+  "flow": "top-down",
+  "flow_chain": [],
+  "palette_role": {
+    "start": {
+      "fill": "#d5e8d4",
+      "stroke": "#82b366"
+    },
+    "hook": {
+      "fill": "#ffe6cc",
+      "stroke": "#d79b00"
+    },
+    "checkout": {
+      "fill": "#e1d5e7",
+      "stroke": "#9673a6"
+    },
+    "build_ok": {
+      "fill": "#fff2cc",
+      "stroke": "#d6b656"
+    },
+    "lint": {
+      "fill": "#e1d5e7",
+      "stroke": "#9673a6"
+    },
+    "lint_ok": {
+      "fill": "#fff2cc",
+      "stroke": "#d6b656"
+    },
+    "tests": {
+      "fill": "#e1d5e7",
+      "stroke": "#9673a6"
+    },
+    "test_ok": {
+      "fill": "#fff2cc",
+      "stroke": "#d6b656"
+    },
+    "staging": {
+      "fill": "#dae8fc",
+      "stroke": "#6c8ebf"
+    },
+    "smoke": {
+      "fill": "#dae8fc",
+      "stroke": "#6c8ebf"
+    },
+    "smoke_ok": {
+      "fill": "#fff2cc",
+      "stroke": "#d6b656"
+    },
+    "deploy": {
+      "fill": "#dae8fc",
+      "stroke": "#6c8ebf"
+    },
+    "released": {
+      "fill": "#d5e8d4",
+      "stroke": "#82b366"
+    },
+    "notify": {
+      "fill": "#dae8fc",
+      "stroke": "#6c8ebf"
+    },
+    "m1": {
+      "fill": "#b0b0b0",
+      "stroke": "#666666"
+    },
+    "m2": {
+      "fill": "#b0b0b0",
+      "stroke": "#666666"
+    },
+    "failed": {
+      "fill": "#d5e8d4",
+      "stroke": "#82b366"
+    }
+  }
+}

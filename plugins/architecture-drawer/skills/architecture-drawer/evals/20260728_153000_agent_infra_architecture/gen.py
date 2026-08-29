@@ -16,6 +16,8 @@ if _SKILL not in sys.path:
     sys.path.insert(0, _SKILL)
 from svg_utils import SVGDrawer, save_svg, rasterize_svg
 from evaluator import evaluate_svg
+from design_brief import DesignBrief, ColorSpec
+from semantic_qa import run_semantic_qa
 
 # Script co-located with its SVG/PNG/PPTX in this dir (output/<ts>_<name>/).
 # Re-run refreshes the triplet in place.
@@ -81,8 +83,9 @@ def card_row(items, y, h, inner_x, inner_w, cn_fs=F_LABEL):
         card(x, y, cw, h, cn, en, fs_cn=cn_fs)
 
 
-def module(x, y, w, h, fill, cn, en, sub_items):
-    drawer.rect(x, y, w, h, rx=8, ry=8, fill=fill, stroke=INK, stroke_width=1.2, bbox=True)
+def module(x, y, w, h, fill, cn, en, sub_items, nid=None):
+    drawer.rect(x, y, w, h, rx=8, ry=8, fill=fill, stroke=INK, stroke_width=1.2, bbox=True,
+                node_id=nid)
     head_two(x + w / 2, y + 22, y + 37, cn, en)
     pad = 12
     sub_y = y + 50
@@ -126,15 +129,19 @@ card_row([("生命周期管理", "Lifecycle"), ("任务调度", "Scheduling"),
 # L3 - Core Capabilities: Memory & Context (teal) | Tools & Gateway (orange)
 mW = 410
 module(SX0 + 18, 356, mW, 132, C_MEM, "记忆与上下文", "Memory & Context",
-       [("向量数据库", "Vector DB"), ("知识图谱", "Knowledge Graph"), ("RAG 检索", "Retrieval")])
+       [("向量数据库", "Vector DB"), ("知识图谱", "Knowledge Graph"), ("RAG 检索", "Retrieval")],
+       nid="memory_ctx")
 module(SX0 + 18 + mW + 20, 356, mW, 132, C_TOOL, "工具与网关", "Tools & Gateway",
-       [("MCP 协议", "MCP"), ("API 集成", "API Integration"), ("函数调用", "Function Call")])
+       [("MCP 协议", "MCP"), ("API 集成", "API Integration"), ("函数调用", "Function Call")],
+       nid="tools_gw")
 
 # L4 - Execution & Environment: Execution Engine (green) | Sandbox (yellow)
 module(SX0 + 18, 564, mW, 120, C_EXEC, "执行引擎", "Execution Engine",
-       [("高并发", "Concurrency"), ("秒级扩容", "Autoscale"), ("快速启动", "Fast Start")])
+       [("高并发", "Concurrency"), ("秒级扩容", "Autoscale"), ("快速启动", "Fast Start")],
+       nid="exec_engine")
 module(SX0 + 18 + mW + 20, 564, mW, 120, C_SAND, "环境与沙箱", "Environment & Sandbox",
-       [("代码执行", "Code Exec"), ("Serverless", "Elastic"), ("安全隔离", "Isolation")])
+       [("代码执行", "Code Exec"), ("Serverless", "Elastic"), ("安全隔离", "Isolation")],
+       nid="sandbox")
 
 # L5 - Infrastructure (4 cards)
 card_row([("计算", "Compute · GPU/CPU"), ("存储", "Storage"), ("网络", "Network"), ("K8s 编排", "Kubernetes")],
@@ -199,11 +206,46 @@ drawer.line(i3, LY0 + 42, i3 + 34, LY0 + 42, stroke=CARD_STROKE, stroke_width=1.
 drawer.text(i3 + 44, LY0 + 42, "安全可观测横跨各层", F_LABEL, fill=INK, anchor="start")
 
 # ---------------------------------------------------------------------------
+# Design Brief (Step 1) — declared from input.md's intent: a 5-layer neutral
+# stack (L1 应用层 -> L5 基础设施层) read top-down, the cross-cutting 安全与可观测
+# band on the right, and the four core modules carrying distinct accent hues
+# (S2 categorical; input.md delegates exact colors to the design system, which
+# kept the stack itself neutral gray — declared here with its actual hex).
+# The dependency spine links band BORDERS across the 20px gutters, and the
+# marker-tip retraction pulls every line endpoint into the gutter, so no
+# inter-layer edge attributes to the next band: an assertable chain would
+# false-FAIL (same gutter-spine situation as the pi_agent / mlir evals).
+# ---------------------------------------------------------------------------
+BRIEF = DesignBrief(
+    scheme="S2",
+    layout="band",
+    flow="top-down",
+    palette_role={
+        "L1":          ColorSpec(NEU_FILL, NEU_STROKE),
+        "L2":          ColorSpec(NEU_FILL, NEU_STROKE),
+        "L3":          ColorSpec(NEU_FILL, NEU_STROKE),
+        "L4":          ColorSpec(NEU_FILL, NEU_STROKE),
+        "L5":          ColorSpec(NEU_FILL, NEU_STROKE),
+        "memory_ctx":  ColorSpec(C_MEM, INK),
+        "tools_gw":    ColorSpec(C_TOOL, INK),
+        "exec_engine": ColorSpec(C_EXEC, INK),
+        "sandbox":     ColorSpec(C_SAND, INK),
+        "SEC":         ColorSpec(C_SEC, INK),
+    },
+    flow_chain=("L1", "L2", "L3", "L4", "L5"),
+)
+
+# ---------------------------------------------------------------------------
 # Evaluate + save
 # ---------------------------------------------------------------------------
 score, report = evaluate_svg(drawer)
 print(f"Quality Score: {score}")
 for line in report:
+    print(line)
+
+qa = run_semantic_qa(drawer, expected_size=(W, H), brief=BRIEF)
+print("Semantic QA:")
+for line in qa.report():
     print(line)
 
 svg_path = str(OUT / f"{NAME}.svg")
@@ -218,3 +260,5 @@ svg_to_pptx(drawer.render(), pptx_path)
 print(f"Saved {svg_path}")
 print(f"Saved {png_path}")
 print(f"Saved {pptx_path} (editable shapes)")
+
+BRIEF.write(str(OUT / "brief.json"))
