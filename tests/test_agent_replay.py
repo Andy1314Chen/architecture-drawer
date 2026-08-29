@@ -32,7 +32,11 @@ from pathlib import Path
 import pytest
 
 from agent_backends import PiAgentBackend, prepare_sandbox
-from conftest import ROOT, LLM_REPLAY_MIN_SCORE, score_gen_script
+from conftest import ROOT, SCRIPTS, LLM_REPLAY_MIN_SCORE, score_gen_script
+
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+from semantic_qa import run_semantic_qa          # noqa: E402
 
 # --- agent prompts ---------------------------------------------------------
 # Short, skill-discovery-respecting instructions. They deliberately do NOT
@@ -140,6 +144,29 @@ def _persist_sandbox(sandbox: Path, eval_name: str, score: int | None, report: s
     return dst
 
 
+def _semantic_gate(sandbox: Path) -> tuple[list[str], list[str]]:
+    """Run semantic QA on the produced SVG against the eval's input.md spec.
+
+    Returns (fail_lines, warn_lines). FAILs gate the run (regenerate / fix);
+    WARNs are fed back into the next refine round so the agent can address
+    them (e.g. rails slicing containers, missing spec entities).
+    """
+    svg = _latest(list(sandbox.glob("*.svg")))
+    if svg is None:
+        return [], []
+    spec = sandbox / "input.md"
+    try:
+        qa = run_semantic_qa(
+            svg.read_text(encoding="utf-8"),
+            spec_text=spec.read_text(encoding="utf-8") if spec.is_file() else None,
+        )
+    except Exception:  # noqa: BLE001 - semantic QA must never crash the gate
+        return [], []
+    fails = [i.render() for i in qa.issues if i.severity == "fail"]
+    warns = [i.render() for i in qa.issues if i.severity != "fail"]
+    return fails, warns
+
+
 def _agent_replay_one(
     backend: PiAgentBackend, eval_dir: Path, max_iter: int, *,
     name: str, keep: bool = False,
@@ -182,11 +209,24 @@ def _agent_replay_one(
             ):
                 break
             prev_score = score
-            backend.run(_AGENT_REFINE, sandbox)              # stateless refine
+            # Semantic feedback: feed this round's semantic-QA findings into
+            # the (stateless) refine prompt so the agent fixes meaning-level
+            # defects — rails over components, missing spec entities —
+            # alongside the geometric ones.
+            _, sem_warns = _semantic_gate(sandbox)
+            refine = _AGENT_REFINE
+            if sem_warns:
+                refine += ("\n\nSemantic QA findings from semantic_qa.py — fix "
+                           "these too (reroute rails off components, add "
+                           "missing spec component labels):\n"
+                           + "\n".join(sem_warns[:10]))
+            backend.run(refine, sandbox)              # stateless refine
             score, report = _score(sandbox)
             last_score, last_report = score, report
             best = max(best, score or 0)
         problems += _check_artifacts(sandbox)
+        sem_fails, _ = _semantic_gate(sandbox)
+        problems += sem_fails
         return best, problems
     finally:
         if keep:

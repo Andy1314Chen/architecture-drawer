@@ -20,6 +20,36 @@ if _SKILL not in sys.path:
     sys.path.insert(0, _SKILL)
 ```
 
+## Step 0 — Intent Judgment (fidelity vs. completion)
+
+Before writing any code, classify the requirement — the two failure modes are
+mirror images: transcribing a vague spec literally produces a broken diagram,
+and "improving" a precise spec produces one the user did not ask for.
+
+**Faithful mode** — the description is clear and detailed (explicit components,
+relations, flow direction, canvas): transcribe it exactly. Do **not** invent
+components, layers, edges, or legend entries the user did not state, and do not
+"upgrade" the palette or topology on your own taste. Adding unrequested boxes
+is a defect, not a feature (画蛇添足).
+
+**Completion mode** — the description is vague (the user may not have a fixed
+picture in mind yet): infer a reasonable design, then state what you inferred.
+Ambiguity signals and the corresponding conservative defaults:
+
+| Missing in the spec | Conservative default |
+|---|---|
+| Relations between named components | connect adjacent tiers only, in the domain's natural flow (client → API → compute → storage) |
+| Canvas / size | 1200×800 (or the diagram-type preset in `references/diagram_types.md`) |
+| Diagram type | pick from `references/diagram_types.md` by content keywords |
+| Layer grouping | group only when the spec's own vocabulary implies it ("… layer", "… module") |
+| A composite-sounding component ("gateway", "engine") | stays ONE node — never split into sub-nodes the user did not mention |
+
+Completion rule: an addition is legitimate only when the diagram is
+structurally incoherent without it — never decorative. List every assumption
+in the final reply ("assumed top-to-bottom flow; inferred gateway→auth edge")
+so the user can veto. When two readings are both plausible, pick the simpler
+one and note the alternative.
+
 ## Core Workflow: Generate-Evaluate-Correct
 
 ```dot
@@ -48,6 +78,48 @@ digraph eval_loop {
    - ⑬ **text-vs-shape & text-vs-text overlap detection** (`check_text_overlaps`): parses every `<text>` bbox (center model, `dominant-baseline="central"`) against all visible circles/rects/polygons/lines/paths AND against other `<text>` — closes the registry blind spot where `bbox=False` text/shapes and `add_element` shapes are invisible to `check_collisions`. Legend/background shapes, the full-canvas bg rect, and rects fully containing the text (intentional in-box labels) are exempt. Like ⑨⑩⑪⑫, this **parses the actual SVG** rather than trusting the API.
    - ⑭ **same-kind peer alignment** (`check_alignment`): two SAME-SIZED same-kind visible nodes that read as a row or column (strong overlap on the perpendicular axis) yet share NEITHER a top/bottom/left/right edge (within 5px) NOR a center line (within 15% of the shorter side) are flagged — the "align to shared edges" layout principle. Differently-sized peers are skipped (a row of varied components legitimately staggers).
    - ⑮ **text-on-fill contrast** (`check_contrast`): WCAG 2 contrast ratio between each `<text>`'s fill and the fill of the smallest `<rect>` containing it — FAIL below 3:1 (large-text floor), WARN below 4.5:1 (AA for normal text) / 3:1 large (≥24px, or ≥18.5px bold). Only text on a **non-neutral (accent)** fill is measured; accent-colored text on a white/neutral canvas (category labels, captions) is a typographic choice, not a fill defect, and is skipped. Replaces the former "manual review recommended" placeholder.
+
+   **3b. Semantic QA** (after the geometry score): call `run_semantic_qa` from
+   `$SKILL/semantic_qa.py`. The evaluator above checks how the picture
+   *renders*; this checks what the picture *means* — the three defect classes
+   a bounding-box evaluator structurally cannot see:
+   - **marker 缺省陷阱** — `marker-end="url(#X)"` referencing an undefined
+     `<marker id>` (the classic case: `arrow_head("arrow", ...)` registered but
+     a `connect()` call left at its default `marker_end="arrowhead"`) → every
+     arrowhead on that edge silently vanishes. FAIL. A defined-but-never-used
+     marker (usually a forgotten `marker_end=`) is flagged as WARN.
+   - **FIGS 尺寸漂移** — declared canvas vs. actual content bbox: content far
+     smaller than the canvas (mis-sized diagram), content poking outside
+     (clipped), or a mismatch against the design-spec size passed as
+     `expected_size=(w, h)`.
+   - **标签错位** — a centered label off its node's centre, a label floating
+     in whitespace (not inside, near, or beneath any node — legitimate
+     top-band titles, branch labels beside edges, and cluster captions are
+     exempt), or a business node box with no label at all.
+   - **箭头线盖在组件上** (`rail-slices-container` / `connector-through-card`)
+     — parsed straight from the rendered geometry, role-blind to the
+     registry: a raw-`line()` bus rail that slices through filled band
+     containers (the right-spine-at-x≈776-inside-the-band trap), or a
+     connector crossing a business card's interior. The registry evaluator
+     is structurally blind to both (rails are never registered as edges;
+     `role='layer'` containers are never registered as nodes).
+   - **文本语义** (`check_text_semantics`, pass `spec_text=input.md`) —
+     placeholder/garbled/empty `<text>` → FAIL; spec component identifiers
+     (bold/backtick identifiers like **AgentEvent**, `server_queue`) missing
+     from the diagram: coverage <40% → FAIL (regenerate — whole components
+     lost), 40–85% → WARN (paraphrase advisory fed back into refine rounds).
+
+   ```python
+   from semantic_qa import run_semantic_qa
+
+   score, report = evaluate_svg(drawer)          # geometry first
+   spec = Path("input.md").read_text() if Path("input.md").exists() else None
+   qa = run_semantic_qa(drawer, expected_size=(1240, 970), spec_text=spec)
+   for line in qa.report():
+       print(line)
+   # qa.has_fail → semantic defect (dangling marker ref, rail over a
+   # component, lost spec entities): must fix before export
+   ```
 
 4. **Auto-Correction**:
    - If the evaluation score is below **80**, analyze the `[FAIL]` items in the report.
@@ -264,6 +336,7 @@ All detection/export capabilities parse the actually-rendered SVG (`evaluate, do
 | ⑲ | Formula rendering (sub/superscript) | `drawer.formula()` emits real `<tspan>` baseline shifts for `_{}`/`^{}` markup; evaluator strips markup in width estimates and counts only `<text>`-tier font sizes so subscripts don't inflate the tier budget |
 | ⑳ | Text-on-fill contrast (WCAG 2) | `check_contrast`: ratio of each `<text>` fill vs its smallest containing `<rect>` fill — FAIL <3:1, WARN <4.5:1 (AA) / 3:1 large (≥24px / ≥18.5px bold); only accent fills measured, accent text on neutral canvas skipped |
 | ㉑ | Same-kind peer alignment | `check_alignment`: same-sized same-kind nodes in a row/column must share a top/bottom/left/right edge (±5px) or a center line (±15%); differently-sized peers exempt |
+| ㉒ | Semantic QA (`semantic_qa.py`) | Meaning-level smoke check after scoring: dangling marker refs (marker 缺省陷阱, FAIL), defined-but-unused markers (WARN), declared-vs-actual canvas size drift (FIGS 尺寸漂移), label/host mismatch (标签错位), raw rails slicing filled containers or cards (箭头线盖在组件上), text semantics vs spec (placeholder/garbled/empty FAIL; spec-entity coverage <40% FAIL / <85% WARN) — parses the rendered SVG incl. grouped shapes, composite arcs, and stroke widths |
 
 ## References & Acknowledgments
 

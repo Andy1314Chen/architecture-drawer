@@ -32,6 +32,7 @@ _MODULE_FUNCS = {
     "svg_utils": ("SVGDrawer", "save_svg", "rasterize_svg"),
     "evaluator": ("evaluate_svg", "auto_refine"),
     "svg2pptx": ("svg_to_pptx", "save_pptx", "PptxConfig", "add_svg_to_slide"),
+    "semantic_qa": ("run_semantic_qa", "semantic_qa"),
 }
 
 
