@@ -15,7 +15,7 @@ Leak-free sandbox shape (every backend):
     <sandbox>/                       # git-init'd so project detection is sane
       .pi/skills/architecture-drawer/
         SKILL.md
-        scripts/                     # svg_utils.py · evaluator.py · svg2pptx.py
+        scripts/                     # svg_utils.py · evaluator.py · semantic_qa.py · svg2pptx.py
         references/                  # design_specs.md · diagram_types.md
         assets/
       AGENTS.md                      # scripts-path hint + output convention
