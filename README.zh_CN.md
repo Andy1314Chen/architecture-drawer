@@ -54,7 +54,7 @@
 
 1. **先想清楚架构的文字版描述。** 在写代码之前，用自然语言把架构讲清楚——分几层、每层有哪些组件、它们之间怎么连接、有没有特殊标注。一份清晰的文字描述（如 `evals/*/input.md` 中的规格）是高质量图表最大的前提。对于开源项目，可以利用 deepwiki 来生成系统架构的文字描述。
 2. **让 skill 自动生成。** 将系统架构文字描述提交给 skill，让它生成初始 `gen.py` 和 SVG。评估器会自动捕获重叠、连接错位和交叉等问题。
-3. **skill 自动审查分数。** 如果分数 ≥80，说明图表结构合理。如果 <80，Agent 能自动用 `auto_refine` 或多轮 LLM 修正（`--llm-iter`）自动修复布局问题。
+3. **skill 自动审查分数。** 如果分数 ≥80，说明图表结构合理。如果 <80，Agent 能自动用 `auto_refine` 修复布局问题，或根据评估器报告多轮迭代修正。
 4. **导出 PPTX 做最终润色。** 运行 `svg_to_pptx()` 获得可编辑的 PowerPoint 文件。在那里调整配色、字体、箭头和布局以匹配品牌或出版风格——这些属于展示层，而非生成器代码的工作。
 
 建议的工作流：先和 DeepWiki 或 Agent 多轮讨论，得出一份清晰的系统架构文字描述，再用本 Skill 快速生成一版 PPTX 架构图，最后在 PPT 里按需微调配色、文字等细节。
@@ -120,7 +120,7 @@ cp -r plugins/architecture-drawer/skills/architecture-drawer .agents/skills/arch
 
 ## 依赖
 
-Agent 生成的 `gen.py` 会导入 skill 内的三个纯 Python 模块（`svg_utils.py`、`evaluator.py`、`svg2pptx.py`）。你无需手写这些代码——Agent 会完成。只需安装以下依赖，生成的图表就能渲染和导出：
+Agent 生成的 `gen.py` 会导入 skill 内的四个纯 Python 模块（`svg_utils.py`、`evaluator.py`、`semantic_qa.py`、`svg2pptx.py`）。你无需手写这些代码——Agent 会完成。只需安装以下依赖，生成的图表就能渲染和导出：
 
 | 依赖 | 用途 | 安装 |
 |---|---|---|
@@ -138,8 +138,7 @@ Agent 生成的 `gen.py` 会导入 skill 内的三个纯 Python 模块（`svg_ut
 | **确定性回归** | `pytest` | 每个 `evals/<name>/gen.py` 分数 ≥ 其阈值且匹配 golden SVG | ✅ 总是 |
 | **规范合规** | `pytest` | `SKILL.md` frontmatter、name↔目录、相对路径引用、核心脚本齐全 | ✅ 总是 |
 | **文档 ↔ API 漂移守卫** | `pytest` | `SKILL.md`/`references/*.md` 中所有 `drawer.<m>(` 都存在于 `SVGDrawer`；公共 API 可导入 | ✅ 总是 |
-| **LLM 重放**（协议 A） | `pytest --llm-replay` | 仅凭 `input.md`+`SKILL.md`（不含 golden）重新生成 `gen.py`，迭代修正，断言分数 ≥80 | 每夜 / 本地 |
-| **Agent 重放**（协议 B） | `pytest --agent-replay` | 把 skill 安装进无泄漏沙箱，让 **Pi 编码 Agent** 自主编写 `gen.py`，断言分数 ≥80 + 完整的 SVG/PPTX/PNG 产物三元组 | 每夜 / 本地 |
+| **Agent 重放** | `pytest --agent-replay` | 把 skill 安装进无泄漏沙箱，让 **Pi 编码 Agent** 自主编写 `gen.py`，断言分数 ≥80 + 完整的 SVG/PPTX/PNG 产物三元组 | 每夜 / 本地 |
 
 Agent 重放层最贴近真实使用：skill 被*安装*（绝非内联），真实 Agent 通过其原生 skill 机制发现它，而 harness——而非 Agent——确定性重跑产出的 `gen.py`。它需要 [`pi`](https://pi.dev) CLI 与一个 provider key，后端接线在 `tests/agent_backends.py`。选项：`--agent-iter N` 限定无状态修正轮数（默认 3），`--agent-eval <name>` 只跑一个用例以便低成本调试（名称无匹配时会显式报错而非静默跳过），`--agent-keep` 把每个用例的产物（Agent 写的 `gen.py` + SVG/PNG/PPTX + `score_report.txt`）保留到 `output/agent_replay/<name>/` 供复盘（已 gitignore）。
 
@@ -152,17 +151,18 @@ architecture-drawer/
 │   ├── .claude-plugin/plugin.json               # 插件清单
 │   └── skills/architecture-drawer/
 │       ├── SKILL.md                             # Agent 可读的工作流规范
-│       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
+│       ├── scripts/                             # svg_utils.py · evaluator.py · semantic_qa.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 套预设配色方案（S1–S4）
 │       ├── evals/                               # 8 个回归测试用例（7 架构 + 1 流程图，每个含 gen.py）
 │       └── assets/
 ├── tests/                                       # pytest：分层回归（见“测试”）
 │   ├── conftest.py                              # fixtures、阈值、评分助手、CLI 选项
 │   ├── agent_backends.py                        # Pi 编码 Agent 后端 + 无泄漏沙箱构建器
-│   ├── test_regression.py                       # 确定性质量+快照；可选 LLM 重放
+│   ├── test_regression.py                       # 确定性质量 + golden 快照（每个冻结 gen.py）
 │   ├── test_skill_spec.py                       # Agent Skills 规范合规
 │   ├── test_doc_api.py                          # 文档 ↔ API 漂移守卫（常开）
-│   ├── test_agent_replay.py                     # 可选真实 Agent 重放（协议 B）
+│   ├── test_semantic_qa.py                      # 语义 QA：marker/尺寸/标签/走线/文本检查
+│   ├── test_agent_replay.py                     # 可选真实 Agent 重放（Pi）
 │   └── golden/*.svg                             # 快照基线
 └── examples/                                    # 生成-评估-导出循环的最小示例
 ```

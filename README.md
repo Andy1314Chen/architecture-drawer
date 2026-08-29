@@ -55,7 +55,7 @@ The first non-architecture case: a top-to-bottom **process flowchart** with four
 
 1. **Start with a clear text description.** Before coding, describe the architecture in prose—how many layers, what components each layer has, how they connect, and any special annotations. A crisp text spec (like the specs in `evals/*/input.md`) is the single biggest predictor of a quality diagram. For open-source projects, you can use the system architecture description from [DeepWiki](https://deepwiki.com).
 2. **Let the skill generate.** Submit the text description to the skill and let it generate the initial `gen.py` and SVG. The evaluator automatically catches overlaps, dangles, and crossings.
-3. **The skill auto-reviews the score.** If the score is ≥80, the diagram is structurally sound. If <80, the agent can automatically fix layout issues via `auto_refine` or multi-round LLM correction (`--llm-iter`).
+3. **The skill auto-reviews the score.** If the score is ≥80, the diagram is structurally sound. If <80, the agent can automatically fix layout issues via `auto_refine` or by iterating on the evaluator report.
 4. **Export to PPTX for final polish.** Run `svg_to_pptx()` to get an editable PowerPoint file. Tweak colors, fonts, arrows, and layout there to match your brand or publication style—these belong in the presentation layer, not the generator code.
 
 Suggested workflow: first discuss with DeepWiki or your agent to produce a clear text description of the system architecture, then use this skill to quickly generate a PPTX diagram, and finally fine-tune colors, labels, and other details directly in PPT.
@@ -117,7 +117,7 @@ cp -r plugins/architecture-drawer/skills/architecture-drawer .agents/skills/arch
 
 ## Dependencies
 
-The agent generates a `gen.py` that imports three pure-Python modules (`svg_utils.py`, `evaluator.py`, `svg2pptx.py`) co-located in the skill. You don't write this code — the agent does. Install these once so generated diagrams can render and export:
+The agent generates a `gen.py` that imports four pure-Python modules (`svg_utils.py`, `evaluator.py`, `semantic_qa.py`, `svg2pptx.py`) co-located in the skill. You don't write this code — the agent does. Install these once so generated diagrams can render and export:
 
 | Dependency | Required by | Install |
 |---|---|---|
@@ -134,8 +134,7 @@ The suite is layered so each layer is cheap, deterministic, and covers a distinc
 | **Deterministic regression** | `pytest` | each `evals/<name>/gen.py` scores ≥ its threshold and matches its golden SVG | ✅ always |
 | **Spec compliance** | `pytest` | `SKILL.md` frontmatter, name↔directory, relative refs, core scripts present | ✅ always |
 | **Doc ↔ API drift guard** | `pytest` | every `drawer.<m>(` documented in `SKILL.md`/`references/*.md` exists on `SVGDrawer`; curated public API importable | ✅ always |
-| **LLM replay** (Protocol A) | `pytest --llm-replay` | regenerate `gen.py` from `input.md`+`SKILL.md` (no golden), iterate, assert score ≥80 | nightly / local |
-| **Agent replay** (Protocol B) | `pytest --agent-replay` | install the skill into a leak-free sandbox, let the **Pi coding agent** author `gen.py`, assert score ≥80 + full SVG/PPTX/PNG artifact triplet | nightly / local |
+| **Agent replay** | `pytest --agent-replay` | install the skill into a leak-free sandbox, let the **Pi coding agent** author `gen.py`, assert score ≥80 + full SVG/PPTX/PNG artifact triplet | nightly / local |
 
 The agent-replay layer is the closest to real usage: the skill is *installed* (never inlined), a real agent discovers it via its native skill mechanism, and the harness — not the agent — re-runs the produced `gen.py` deterministically. It needs the [`pi`](https://pi.dev) CLI and a provider key; backend wiring lives in `tests/agent_backends.py`. Options: `--agent-iter N` caps the stateless refine rounds (default 3), `--agent-eval <name>` scopes it to one case for cheap debugging (a name matching nothing fails loudly rather than silently skipping), and `--agent-keep` retains each case's output (agent-written `gen.py` + SVG/PNG/PPTX + `score_report.txt`) under `output/agent_replay/<name>/` for review (gitignored).
 
@@ -148,17 +147,18 @@ architecture-drawer/
 │   ├── .claude-plugin/plugin.json               # plugin manifest
 │   └── skills/architecture-drawer/
 │       ├── SKILL.md                             # agent-consumable workflow (spec-compliant)
-│       ├── scripts/                             # svg_utils.py · evaluator.py · svg2pptx.py
+│       ├── scripts/                             # svg_utils.py · evaluator.py · semantic_qa.py · svg2pptx.py
 │       ├── references/design_specs.md           # 4 preset color schemes (S1–S4)
 │       ├── evals/                               # 8 regression cases (7 architecture + 1 flowchart, gen.py each)
 │       └── assets/
 ├── tests/                                       # pytest: layered regression (see "Testing")
 │   ├── conftest.py                              # fixtures, thresholds, score helpers, CLI options
 │   ├── agent_backends.py                        # Pi coding-agent backend + leak-free sandbox builder
-│   ├── test_regression.py                       # deterministic quality+snapshot; opt-in LLM replay
+│   ├── test_regression.py                       # deterministic quality+snapshot for every frozen gen.py
 │   ├── test_skill_spec.py                       # Agent Skills spec compliance
 │   ├── test_doc_api.py                          # doc ↔ API drift guard (always on)
-│   ├── test_agent_replay.py                     # opt-in real-agent replay (Protocol B)
+│   ├── test_semantic_qa.py                      # semantic QA: marker/size/label/route/text checks
+│   ├── test_agent_replay.py                     # opt-in real-agent replay (Pi)
 │   └── golden/*.svg                             # snapshot baselines
 └── examples/                                    # minimal demo of the generate-evaluate-export loop
 ```

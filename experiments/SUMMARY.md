@@ -3,6 +3,62 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — removed the LLM-replay layer (former "Protocol A")
+
+**Decision (maintainer):** drop `pytest --llm-replay` / `--llm-iter` entirely.
+Rationale: the layer replayed the skill as *pasted documentation* inside a
+single headless `claude -p` call — no skill installation, no native discovery,
+no agent tooling — so it measured SKILL.md doc sufficiency, not real
+regression behavior. `--agent-replay` (real install + Pi-native discovery +
+self-authored gen.py) covers the same anti-leakage contract one layer closer
+to real usage; the headless layer was a weaker duplicate.
+
+**Removed:** `replay_gen` / `_llm_generate` / `_run_and_score` /
+`_build_replay_prompt` / `_build_refine_prompt` / `_extract_code` in
+`tests/conftest.py` (+ the `--llm-replay`/`--llm-iter` options, `llm_replay`
+marker, now-unused `os`/`shutil`/`tempfile` imports), `test_llm_replay_quality`
+in `tests/test_regression.py`, the stale `replay_out/` .gitignore entry, and
+all doc references (both READMEs, CHANGELOG Unreleased, AGENTS.md,
+`agent_backends.py` docstring cross-ref). **Renamed** the shared floor
+constant `LLM_REPLAY_MIN_SCORE` → `AGENT_REPLAY_MIN_SCORE` (value unchanged,
+80) so no symbol names a deleted feature.
+
+**Verification:** `pytest -q` → 66 passed, 1 opt-in skip (agent-replay only;
+the llm-replay skip is gone). `pytest --llm-replay` now fails with
+"unrecognized arguments". Grep confirms zero remaining code/doc references —
+only this log and the CHANGELOG Removed entry mention the old names.
+
+
+## 2026-08-29 — semantic-QA layer + pi_agent spine fix
+
+**Semantic-QA layer** (`scripts/semantic_qa.py`, 940 lines): meaning-level
+smoke-check on the rendered SVG after the geometry score. Five check families:
+dangling marker refs (FAIL — the `connect()` default-`arrowhead` trap where
+every arrowhead silently vanishes), unused markers (WARN), canvas size drift,
+label/host mismatch, rails slicing filled containers / connectors through
+cards, text semantics vs spec (placeholder FAIL; entity coverage <40% FAIL /
+<85% WARN). Parses the raw SVG incl. grouped shapes and composite arcs; the
+registry evaluator is structurally blind to all five (rails are never
+registered as edges; `role='layer'` containers never registered as nodes).
+Wired into `--agent-replay` (FAILs gate; WARNs feed refine) and SKILL.md §3b.
+21 tests in `tests/test_semantic_qa.py` incl. the exact production trap and a
+clean-pass guarantee over every golden eval SVG (allow-list: mlir's verified
+unused `ag` marker; spec-entities-partial on 4 evals where the diagram
+reasonably paraphrases the spec wording).
+
+**pi_agent spine fix**: the right AgentEvent spine's first segment started
+24px inside the LLM API box and crossed band fills; segments now live in the
+inter-band gutters (first segment still kisses 8px into the LLM box — known
+residual, see below).
+
+**Known residuals (deliberately not fixed yet):** (1) gen.py's comment claims
+"kisses the LLM box's TOP edge (LLMY+8)" but LLMY+8 is 8px *inside* the box,
+and input.md says "NEVER cross into the LLM box interior" — comment/spec
+wording vs geometry disagree by 8px (under the checker's 24px threshold);
+(2) semantic FAILs are not fed into the agent-replay refine prompt — only
+WARNs are — so a round-0 semantic FAIL on a geometrically-perfect diagram
+fails the case without the agent getting a repair chance.
+
 ## 2026-08-02 — agent-replay regression layer (Protocol B, Pi backend)
 
 **Goal:** add a regression path that installs the skill into a real coding
