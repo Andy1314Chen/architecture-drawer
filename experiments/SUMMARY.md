@@ -3,6 +3,36 @@
 Running log of work on architecture-drawer. Append newest to the top. Mark
 `BLOCKED` for external blockers; record outcomes (success **and** failure).
 
+## 2026-08-29 — agent-replay unblocked (provider pinning + timeout banking); coarse-spec pilot PASSES
+
+**BLOCKED → resolved.** `--agent-replay` died with an opaque upstream 403 HTML
+page before the agent even started. Diagnosis: `PiAgentBackend` invoked a bare
+`pi -p`, inheriting `~/.pi/agent/settings.json`'s `defaultProvider=deepseek`
+while `auth.json` holds credentials only for **zai**. A bare `--model` is NOT a
+fix (glm-4.7 exists under 4 configured providers → ambiguous), and `--provider`
+alone still uses that provider's default model (also 403). Fix (72e9b7b): pin
+**both** — `--agent-provider`/`--agent-model` options, constructor args, or
+`PI_AGENT_PROVIDER`/`PI_AGENT_MODEL`. Working combo on this machine:
+`--agent-provider zai --agent-model glm-4.7` (smoke: `pi -p` → PONG, exit 0).
+
+**Second harness defect found by the first pilot:** round-0 ran 1802s, hit the
+1800s subprocess timeout, and the case aborted as "agent run error" — although
+the agent had already written a gen.py gating at **88** (0 FAIL, one contrast
+WARN, semantic QA clean). The old timeout was calibrated for the detailed-spec
+era (~912s worst); coarse-spec rounds legitimately take 45+ min of real design.
+Fix (bc08332): `AgentBackend.timeout` 1800→3600, and `run()` converts
+TimeoutExpired into a synthetic returncode-124 CompletedProcess so the harness
+scores the on-disk gen.py and the refine loop repairs it (same contract as
+`score_gen_script`). Verified in-process (1s timeout → 124 + message).
+
+**Coarse-spec pilot result (vllm, zai/glm-4.7, --agent-keep):** PASSED in
+1947s — final score **100** (0 FAIL / 0 WARN), semantic QA 100/clean, full
+SVG/PNG/PPTX triplet; deterministic re-gate of the retained sandbox confirms.
+Discriminative-power evidence vs the detailed-spec era: the killed round-0
+took ~45 min of genuine self-design (own canvas 1400×1200 vs golden 1240×970,
+own blue-family palette) landing at 88-with-contrast-WARN — then refine closed
+it to 100. The replay now measures text→diagram capability, not transcription.
+
 ## 2026-08-29 — eval specs rewritten to coarse semantic form (de-specification)
 
 **Problem (maintainer decision):** all 8 `evals/*/input.md` carried a
