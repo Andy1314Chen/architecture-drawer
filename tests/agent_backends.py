@@ -133,7 +133,10 @@ class AgentBackend(ABC):
 
     name: str = "agent"
     cli: str = ""            # executable name checked on PATH
-    timeout: int = 1800      # per-run seconds (covers ~912s worst observed + variance)
+    timeout: int = 3600      # per-run seconds. Coarse-spec rounds legitimately take
+                             # 45+ min of real design work (observed 1802s killed at
+                             # the old 1800s default with a valid gen.py on disk);
+                             # override via PI_AGENT_TIMEOUT or the constructor.
 
     @abstractmethod
     def run(self, prompt: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -199,6 +202,27 @@ class PiAgentBackend(AgentBackend):
             args += ["--model", self.model]
         return args
 
+    def run(self, prompt: str, cwd: Path) -> subprocess.CompletedProcess:
+        args = self._base_args(cwd) + [prompt]
+        try:
+            return subprocess.run(
+                args, cwd=str(cwd), capture_output=True, text=True,
+                timeout=self.timeout, env=self._env(),
+            )
+        except subprocess.TimeoutExpired as exc:
+            # A timeout must not abort the case: the agent has usually written
+            # a (partial or complete) gen.py by then. Surface it as a synthetic
+            # non-zero exit so the harness scores whatever is on disk and the
+            # refine loop repairs it — the same contract score_gen_script()
+            # applies to slow generator scripts.
+            partial_out = exc.stdout if isinstance(exc.stdout, str) else ""
+            partial_err = exc.stderr if isinstance(exc.stderr, str) else ""
+            return subprocess.CompletedProcess(
+                args, returncode=124,
+                stdout=partial_out,
+                stderr=f"pi timed out after {exc.timeout}s\n" + partial_err,
+            )
+
     def _env(self) -> dict[str, str]:
         env = os.environ.copy()
         # Skip the startup version check so a run never depends on pi.dev being
@@ -208,12 +232,6 @@ class PiAgentBackend(AgentBackend):
         env.setdefault("PI_SKIP_VERSION_CHECK", "1")
         return env
 
-    def run(self, prompt: str, cwd: Path) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            self._base_args(cwd) + [prompt],
-            cwd=str(cwd), capture_output=True, text=True,
-            timeout=self.timeout, env=self._env(),
-        )
 
     @staticmethod
     def available() -> bool:
