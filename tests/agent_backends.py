@@ -169,15 +169,22 @@ class PiAgentBackend(AgentBackend):
       ``-`` (we do not inline SKILL.md, whose ``---`` YAML frontmatter would be
       mis-parsed as a flag), so it is safe as a bare positional.
 
-    Auth is the caller's responsibility: set ``ANTHROPIC_API_KEY`` (or another
-    provider key / a prior ``pi /login``) before running the suite. Optionally
-    pin a model via the ``PI_AGENT_MODEL`` env var or the *model* argument.
+    Auth is the caller's responsibility: a provider key in pi's ``auth.json``
+    (or ``ANTHROPIC_API_KEY`` / a prior ``pi /login``). The interactive
+    default provider (``~/.pi/agent/settings.json``) may differ from the one
+    you have credentials for — a bare ``pi -p`` then fails with an opaque
+    upstream 403 page. Pin BOTH the provider and the model (constructor args,
+    ``--agent-provider``/``--agent-model``, or the ``PI_AGENT_PROVIDER`` /
+    ``PI_AGENT_MODEL`` env vars) so the headless run never depends on the
+    interactive defaults. A bare ``--model`` is ambiguous when several
+    providers offer the same model id.
     """
 
     name = "pi"
     cli = "pi"
 
-    def __init__(self, model: str | None = None):
+    def __init__(self, provider: str | None = None, model: str | None = None):
+        self.provider = provider or os.environ.get("PI_AGENT_PROVIDER")
         self.model = model or os.environ.get("PI_AGENT_MODEL")
 
     def _base_args(self, cwd: Path) -> list[str]:
@@ -186,6 +193,8 @@ class PiAgentBackend(AgentBackend):
         if skill.is_dir():
             args += ["--skill", str(skill)]   # bypass the project-trust gate
         args += ["-a"]                         # trust project-local files (AGENTS.md)
+        if self.provider:
+            args += ["--provider", self.provider]
         if self.model:
             args += ["--model", self.model]
         return args

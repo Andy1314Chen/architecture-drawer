@@ -86,6 +86,18 @@ def pytest_addoption(parser):
              "+ score report) under output/agent_replay/<eval_name>/ instead of "
              "deleting the sandbox. Default off (leak-free).",
     )
+    parser.addoption(
+        "--agent-provider", action="store", default=None,
+        help="Pin the pi provider for --agent-replay (e.g. zai). Without it the "
+             "run inherits pi's interactive default, which may lack credentials "
+             "(opaque upstream 403). Env: PI_AGENT_PROVIDER.",
+    )
+    parser.addoption(
+        "--agent-model", action="store", default=None,
+        help="Pin the pi model for --agent-replay (e.g. glm-4.7). A bare model id "
+             "can be ambiguous across providers; pin the provider too. "
+             "Env: PI_AGENT_MODEL.",
+    )
 
 
 def pytest_configure(config):

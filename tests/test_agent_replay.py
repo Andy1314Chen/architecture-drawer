@@ -273,7 +273,10 @@ def test_agent_replay_quality(eval_cases, request):
     if not candidates:
         pytest.skip("no eval with an input.md spec to replay")
 
-    backend = PiAgentBackend()
+    backend = PiAgentBackend(
+        provider=request.config.getoption("--agent-provider"),
+        model=request.config.getoption("--agent-model"),
+    )
     failures: list[str] = []
     checked = 0
     for name, eval_dir in sorted(candidates.items()):

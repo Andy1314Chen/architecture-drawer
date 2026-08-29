@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The leak-free sandbox no longer copies `scripts/__pycache__` / `*.pyc` (`shutil.copytree` now ignores `__pycache__`).
   - Synced the agent-replay CLI flags (`--agent-iter`, `--agent-eval`, `--agent-keep`) in both READMEs.
 
+- **`--agent-replay` opaque 403 when pi's interactive default provider lacks credentials** — `PiAgentBackend` invoked a bare `pi -p`, inheriting `~/.pi/agent/settings.json`'s default provider; with credentials present only for another provider (e.g. zai), every run failed with an upstream 403 HTML page before the agent started. The backend now pins **both** provider and model (constructor args, new `--agent-provider`/`--agent-model` pytest options, or `PI_AGENT_PROVIDER`/`PI_AGENT_MODEL` env). A bare `--model` is not enough: the same model id can exist under several configured providers (ambiguous), and `--provider` alone still uses that provider's default model. Verified end-to-end: sandbox + pinned argv → `pi -p` exits 0.
+
 ## [1.0.0] — 2026-07-30
 
 First public release. Extracted from an internal `ppt-agent` workspace and
