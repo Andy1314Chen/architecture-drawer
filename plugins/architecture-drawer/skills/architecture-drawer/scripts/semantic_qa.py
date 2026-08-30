@@ -1118,6 +1118,24 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
                     f"follow the declared '{brief.flow}' flow (< "
                     f"{dominance * 100:.0f}%) — routing is inverted or "
                     f"incoherent with the contract."))
+        # axis truthfulness: if most inter-layer edges travel farther along
+        # the CROSS axis than the declared flow axis, the flow direction
+        # itself is misdeclared (e.g. "left-right" over horizontal bands
+        # whose spine runs vertically). Symmetric to dominance, so it stays
+        # robust on small samples (>= 2 edges) where the directional
+        # dominance ratio is skipped by design.
+        if len(inter) >= 2:
+            def _cross_dominant(p1, p2):
+                dy, dx = abs(p2[1] - p1[1]), abs(p2[0] - p1[0])
+                return dx > dy if vertical else dy > dx
+            cross = sum(1 for a, b, p1, p2 in inter if _cross_dominant(p1, p2))
+            if cross / len(inter) >= dominance:
+                errs.append(Issue(
+                    "fail", "brief-flow-axis",
+                    f"{100 * cross / len(inter):.0f}% of inter-layer edges "
+                    f"travel farther along the cross axis than the declared "
+                    f"'{brief.flow}' axis — the flow direction is "
+                    f"misdeclared."))
         outs = [0] * len(brief.layers)
         ins = [0] * len(brief.layers)
         for a, b, p1, p2 in inter:

@@ -221,6 +221,23 @@ def test_inverted_flow_dominance_fails():
     res = run_semantic_qa(_grid_drawer(up_count=3, down_count=1), brief=BRIEF)
     assert "brief-flow-dominance" in _codes(res)
 
+def test_misdeclared_flow_axis_fails():
+    # vertical spine declared as "left-right": every inter-layer edge
+    # travels farther along the cross axis — must FAIL even though the
+    # sample is too small for the directional-dominance ratio.
+    lr = DesignBrief(layout="band", flow="left-right",
+                     palette_role=BRIEF.palette_role,
+                     flow_chain=BRIEF.flow_chain)
+    codes = _codes(run_semantic_qa(_grid_drawer(up_count=1, down_count=4),
+                                   brief=lr))
+    assert "brief-flow-axis" in codes
+
+
+def test_true_flow_axis_clean():
+    codes = _codes(run_semantic_qa(_grid_drawer(up_count=1, down_count=4),
+                                   brief=BRIEF))
+    assert "brief-flow-axis" not in codes
+
 
 def test_legit_back_edges_tolerated():
     # 5 edges, 1 return: 80% follow top-down >= 70% — must PASS
