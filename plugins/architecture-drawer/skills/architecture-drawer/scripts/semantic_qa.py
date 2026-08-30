@@ -115,7 +115,8 @@ import xml.etree.ElementTree as _ET
 
 try:
     from svg_utils import (BBox, multiply_matrix, parse_transform,
-                           transform_point)
+                           transform_point, is_neutral, normalize_color)
+    from design_brief import is_plain
 except ImportError:  # standalone use without the skill on sys.path
     _I = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
@@ -127,6 +128,15 @@ except ImportError:  # standalone use without the skill on sys.path
 
     def transform_point(m, p):
         return p
+
+    def is_neutral(hex_color):
+        return False
+
+    def normalize_color(value):
+        return None
+
+    def is_plain(fill):
+        return fill in ("", "none", "#ffffff")
 
 
 def _local(tag):
@@ -933,7 +943,6 @@ _NON_BUSINESS = ("decoration", "legend", "background")
 
 def _pnorm(raw):
     """Normalize a raw fill/stroke attr to a comparable token."""
-    from svg_utils import normalize_color
     if raw is None:
         return ""
     return normalize_color(raw) or str(raw).strip().lower()
@@ -949,9 +958,10 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
 
     A — palette contract: every declared key (data-node-id) must be rendered
         as a business shape with the declared (fill, stroke) pair; declared
-        tint rendered white/neutral = FAIL (structure lost its color), wrong
-        chromatic tint = WARN, stroke mismatch = WARN; chromatic paints on
-        undeclared business shapes = WARN.
+        tint rendered white/none = FAIL (structure lost its color — tint-
+        plainness follows design_brief.is_plain, so a declared gray tint
+        counts as color too), wrong chromatic tint = WARN, stroke mismatch =
+        WARN; chromatic paints on undeclared business shapes = WARN.
     B — layout contract: band -> each declared layer container exists
         (identity via data-node-id) and is non-empty; unmarked layer-role
         containers = WARN. node -> any layer container rendered = FAIL.
@@ -970,7 +980,6 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
     consistency. A coherently-wrong brief passes; intent is guarded by
     spec-entity coverage and human review of the brief.
     """
-    from svg_utils import is_neutral
     rects, rect_roles, aligned = _dedup_rects(
         doc["rects"], doc.get("rect_roles"), eps=0.75,
         aligned={"rect_ids": doc["rect_ids"], "rect_paints": doc["rect_paints"]})
@@ -999,7 +1008,7 @@ def check_design_brief(brief, doc, errs, dominance=0.70):
             continue
         for i in idxs:
             fill, stroke = paints[i]
-            if not is_neutral(spec.fill) and fill in ("", "none", "#ffffff"):
+            if not is_plain(spec.fill) and fill in ("", "none", "#ffffff"):
                 errs.append(Issue(
                     "fail", "brief-tint-lost",
                     f"declared tint '{key}' rendered with a white/neutral "

@@ -169,6 +169,31 @@ def test_declared_tint_rendered_white_fails():
     assert "brief-tint-lost" in _codes(res)
 
 
+def test_declared_none_fill_is_plain_not_tint():
+    """ColorSpec('none', ...) is a PLAIN declaration (is_plain) — an honestly
+    rendered transparent shape must not FAIL brief-tint-lost. Regression for
+    the is_neutral/is_plain asymmetry (is_neutral can't parse 'none')."""
+    d = SVGDrawer(600, 300)
+    d.rect(50, 40, 300, 80, fill="none", stroke="#1b3a5c", node_id="ghost")
+    d.text(200, 80, "outlined only", 12, anchor="middle")
+    brief = DesignBrief(layout="node", flow="none",
+                        palette_role={"ghost": ColorSpec("none", "#1b3a5c")})
+    assert "brief-tint-lost" not in _codes(run_semantic_qa(d, brief=brief))
+
+
+def test_declared_gray_tint_rendered_white_fails():
+    """A declared gray fill is a TINT per is_plain (structure color), so
+    rendering it white loses the tint and must FAIL — the schema's own
+    tint_keys derivation treats gray as color (regression: is_neutral used
+    to make gray->white silent)."""
+    d = SVGDrawer(600, 300)
+    d.rect(50, 40, 300, 80, fill="white", stroke="#666666", node_id="m1")
+    d.text(200, 80, "merge", 12, anchor="middle")
+    brief = DesignBrief(layout="node", flow="none",
+                        palette_role={"m1": ColorSpec("#b0b0b0", "#666666")})
+    assert "brief-tint-lost" in _codes(run_semantic_qa(d, brief=brief))
+
+
 def test_wrong_tint_and_stroke_warn():
     wrong = DesignBrief(palette_role={
         "api":    ColorSpec("#ffe6cc", "#d79b00"),
