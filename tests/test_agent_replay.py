@@ -12,7 +12,10 @@ agent self-reports) and asserts:
   - the SVG exists and is XML-parseable;
   - the PPTX exists, opens via ``python-pptx``, and has shapes;
   - the PNG exists and is non-empty (tolerated per-case when ``rsvg-convert``
-    is absent — PNG rasterization is a soft dep).
+    is absent — PNG rasterization is a soft dep);
+  - the brief contract holds: ``brief.json`` exists, parses, and the SVG
+    passes semantic QA against it (declared palette/layout/flow) — a
+    missing brief also surfaces a ``brief-absent`` WARN in refine rounds.
 
 Anti-leakage: only the skill's public surface (no ``evals/``) + the target
 eval's ``input.md`` enter the sandbox. The golden ``gen.py`` is never copied,
@@ -24,6 +27,7 @@ Skipped by default. Run with ``pytest --agent-replay [--agent-iter N]
 """
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import xml.etree.ElementTree as ET
@@ -37,6 +41,7 @@ from conftest import ROOT, SCRIPTS, AGENT_REPLAY_MIN_SCORE, score_gen_script
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 from semantic_qa import run_semantic_qa          # noqa: E402
+from design_brief import DesignBrief             # noqa: E402
 
 # --- agent prompts ---------------------------------------------------------
 # Short, skill-discovery-respecting instructions. They deliberately do NOT
@@ -133,8 +138,6 @@ def _check_artifacts(sandbox: Path) -> list[str]:
         problems.append("no brief.json produced (design-brief contract skipped)")
     else:
         try:
-            sys.path.insert(0, str(SCRIPTS))
-            from design_brief import DesignBrief  # noqa: WPS433 (sandboxed)
             DesignBrief.load(str(brief))
         except Exception as exc:  # noqa: BLE001 - any parse failure fails
             problems.append(f"brief.json does not parse: {exc}")
@@ -160,21 +163,33 @@ def _persist_sandbox(sandbox: Path, eval_name: str, score: int | None, report: s
 
 
 def _semantic_gate(sandbox: Path) -> tuple[list[str], list[str]]:
-    """Run semantic QA on the produced SVG against the eval's input.md spec.
+    """Run semantic QA on the produced SVG against the eval's input.md spec
+    AND its brief.json contract.
 
     Returns (fail_lines, warn_lines). FAILs gate the run (regenerate / fix);
     WARNs are fed back into the next refine round so the agent can address
-    them (e.g. rails slicing containers, missing spec entities).
+    them (e.g. rails slicing containers, missing spec entities, a skipped
+    design brief). The brief is loaded from the sandbox's own brief.json —
+    without it the A/B/C contract checks cannot run (and the harness-side
+    brief-absent WARN nudges the agent to declare it; _check_artifacts then
+    fails a still-missing brief.json outright).
     """
     svg = _latest(list(sandbox.glob("*.svg")))
     if svg is None:
         return [], []
     spec = sandbox / "input.md"
+    brief = None
+    brief_path = sandbox / "brief.json"
+    if brief_path.is_file():
+        try:
+            brief = DesignBrief.load(str(brief_path))
+        except Exception:  # noqa: BLE001 - unparseable brief == absent here
+            brief = None   # _check_artifacts reports the parse failure
     try:
         qa = run_semantic_qa(
             svg.read_text(encoding="utf-8"),
             spec_text=spec.read_text(encoding="utf-8") if spec.is_file() else None,
-        )
+            brief=brief)
     except Exception:  # noqa: BLE001 - semantic QA must never crash the gate
         return [], []
     fails = [i.render() for i in qa.issues if i.severity == "fail"]
@@ -328,3 +343,27 @@ def test_agent_replay_quality(eval_cases, request):
             f"agent replay failed {len(failures)} check(s) across {checked} "
             f"case(s): " + "; ".join(failures)
         )
+
+
+# --- deterministic unit coverage for the harness gates (no agent needed) ---
+def test_semantic_gate_enforces_brief_contract(tmp_path):
+    """_semantic_gate must load the sandbox's brief.json so the A/B/C checks
+    actually run in replay — a declared tint rendered white surfaces as a
+    FAIL, and a missing brief.json surfaces the brief-absent WARN instead of
+    silently skipping the contract."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300">'
+        '<rect x="50" y="40" width="300" height="80" fill="white" '
+        'stroke="#666666" data-node-id="m1" data-graph-role="node"/></svg>'
+    )
+    (tmp_path / "out.svg").write_text(svg, encoding="utf-8")
+    (tmp_path / "brief.json").write_text(json.dumps({
+        "layout": "node", "flow": "none",
+        "palette_role": {"m1": {"fill": "#b0b0b0", "stroke": "#666666"}},
+    }), encoding="utf-8")
+    fails, warns = _semantic_gate(tmp_path)
+    assert any("brief-tint-lost" in f for f in fails)
+    assert not any("brief-absent" in w for w in warns)
+    (tmp_path / "brief.json").unlink()
+    fails, warns = _semantic_gate(tmp_path)
+    assert any("brief-absent" in w for w in warns)
