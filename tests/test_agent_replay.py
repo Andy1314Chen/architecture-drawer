@@ -310,6 +310,12 @@ def test_agent_replay_quality(eval_cases, request):
                 f"--agent-case {adhoc!r} has no input.md spec; expected a "
                 "directory containing input.md"
             )
+        if p.name in candidates:
+            pytest.fail(
+                f"--agent-case directory name {p.name!r} collides with a "
+                "frozen eval name — rename the directory (retained output "
+                "would land in the same output/agent_replay/<name>/ slot)"
+            )
         # RESTRICT to the ad-hoc case: appending to the frozen candidates
         # (the naive wiring) silently replayed the whole 8-eval suite
         # whenever --agent-eval was omitted.
