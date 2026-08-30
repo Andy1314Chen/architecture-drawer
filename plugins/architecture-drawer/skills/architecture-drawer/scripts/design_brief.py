@@ -22,12 +22,20 @@ Schema rules (inconsistent states are unconstructible):
     text-only bands are palette members but not chain stages; membership is
     not derivable from paint, so it is declared explicitly.
   - tint/plain membership is DERIVED from ``ColorSpec.fill`` (white == plain).
-  - All colors are normalized to lowercase #rrggbb ("white" -> "#ffffff") so
-    hex case/alias never produces noise failures.
+  - All colors are canonicalized through ``svg_utils.normalize_color`` to
+    lowercase #rrggbb ("white" -> "#ffffff", named colors like "gray" ->
+    "#808080") — the same normalizer the checker applies to rendered SVG
+    fills, so hex case/alias/named tokens never produce noise failures.
 """
 import json
 from dataclasses import dataclass, field
 from typing import Mapping, Tuple
+
+try:
+    from svg_utils import normalize_color
+except ImportError:  # standalone use without the skill on sys.path
+    def normalize_color(value):  # type: ignore[misc]
+        return None
 
 _WHITE = {"white", "#fff", "#ffffff"}
 _LAYOUTS = ("band", "node")
@@ -46,6 +54,17 @@ def norm_hex(color: str) -> str:
     return c
 
 
+def canon_hex(color: str) -> str:
+    """Canonical #rrggbb via svg_utils.normalize_color — the SAME
+    normalization the checker applies to rendered fills, so a brief and the
+    SVG compare on identical tokens (named colors like 'gray' resolve to hex
+    on both sides). Tokens normalize_color cannot parse ('none', '',
+    unknown) keep norm_hex's lowercase passthrough so is_plain still
+    recognizes them."""
+    c = norm_hex(color)
+    return normalize_color(c) or c
+
+
 def is_plain(fill: str) -> bool:
     """A plain fill reads as white/neutral canvas (not a tinted structure)."""
     return norm_hex(fill) in _WHITE or norm_hex(fill) in ("none", "")
@@ -59,8 +78,8 @@ class ColorSpec:
     stroke: str
 
     def __post_init__(self):
-        object.__setattr__(self, "fill", norm_hex(self.fill))
-        object.__setattr__(self, "stroke", norm_hex(self.stroke))
+        object.__setattr__(self, "fill", canon_hex(self.fill))
+        object.__setattr__(self, "stroke", canon_hex(self.stroke))
 
     def as_pair(self) -> Tuple[str, str]:
         return (self.fill, self.stroke)

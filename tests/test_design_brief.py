@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugins"
                         / "architecture-drawer" / "skills"
                         / "architecture-drawer" / "scripts"))
 
-from design_brief import ColorSpec, DesignBrief, is_plain, norm_hex  # noqa: E402
+from design_brief import ColorSpec, DesignBrief, canon_hex, is_plain, norm_hex  # noqa: E402
 from semantic_qa import run_semantic_qa  # noqa: E402
 from svg_utils import SVGDrawer  # noqa: E402
 
@@ -39,6 +39,12 @@ def test_norm_hex_and_is_plain():
     assert norm_hex("#DAE8FC") == "#dae8fc"
     assert is_plain("white") and is_plain("#FFFFFF") and is_plain("none")
     assert not is_plain("#dae8fc")
+    # canon_hex = the checker's normalizer: named colors resolve on BOTH
+    # sides of the comparison, unparseable tokens pass through for is_plain
+    assert canon_hex("Gray") == "#808080"
+    assert canon_hex("silver") == "#c0c0c0"
+    assert canon_hex("none") == "none"
+    assert ColorSpec("gray", "black").fill == "#808080"
 
 
 def test_tint_plain_derived_not_declared():
@@ -126,6 +132,19 @@ def test_dup_geometry_adopts_dropped_identity():
     d.connect("t1", "bottom", "b1", "top", stroke="#1b3a5c", marker_end="ar")
     codes = _codes(run_semantic_qa(d, brief=BRIEF))
     assert not [c for c in codes if c.startswith("brief-")]
+
+
+def test_named_color_declaration_matches_named_render():
+    """A brief declared with a named color ('gray') and the SVG rendering the
+    same named token must compare clean — both sides normalize through
+    svg_utils.normalize_color (regression: brief-fill-mismatch WARN on an
+    honest declaration)."""
+    d = SVGDrawer(600, 300)
+    d.rect(50, 40, 300, 80, fill="gray", stroke="black", node_id="g")
+    d.text(80, 80, "gray node", 12)
+    brief = DesignBrief(layout="node", flow="none",
+                        palette_role={"g": ColorSpec("gray", "black")})
+    assert "brief-fill-mismatch" not in _codes(run_semantic_qa(d, brief=brief))
 
 
 def test_declared_key_missing_fails():
