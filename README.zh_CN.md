@@ -140,7 +140,7 @@ Agent 生成的 `gen.py` 会导入 skill 内的四个纯 Python 模块（`svg_ut
 | **文档 ↔ API 漂移守卫** | `pytest` | `SKILL.md`/`references/*.md` 中所有 `drawer.<m>(` 都存在于 `SVGDrawer`；公共 API 可导入 | ✅ 总是 |
 | **Agent 重放** | `pytest --agent-replay` | 把 skill 安装进无泄漏沙箱，让 **Pi 编码 Agent** 自主编写 `gen.py`，断言分数 ≥80 + 完整的 SVG/PPTX/PNG 产物三元组 | 每夜 / 本地 |
 
-Agent 重放层最贴近真实使用：skill 被*安装*（绝非内联），真实 Agent 通过其原生 skill 机制发现它，而 harness——而非 Agent——确定性重跑产出的 `gen.py`。它需要 [`pi`](https://pi.dev) CLI 与一个 provider key，后端接线在 `tests/agent_backends.py`。请**同时**钉住 provider 与 model（`--agent-provider zai --agent-model glm-4.7`，或环境变量 `PI_AGENT_PROVIDER`/`PI_AGENT_MODEL`）——否则无头运行继承 pi 的交互默认 provider，若其没有凭证会以一个不透明的上游 403 失败；裸 `--model` id 还可能在多个 provider 间歧义。其他选项：`--agent-iter N` 限定无状态修正轮数（默认 3），`--agent-eval <name>` 只跑一个用例以便低成本调试（名称无匹配时会显式报错而非静默跳过），`--agent-keep` 把每个用例的产物（Agent 写的 `gen.py` + SVG/PNG/PPTX + `score_report.txt`）保留到 `output/agent_replay/<name>/` 供复盘（已 gitignore）。
+Agent 重放层最贴近真实使用：skill 被*安装*（绝非内联），真实 Agent 通过其原生 skill 机制发现它，而 harness——而非 Agent——确定性重跑产出的 `gen.py`。它需要 [`pi`](https://pi.dev) CLI 与一个 provider key，后端接线在 `tests/agent_backends.py`。请**同时**钉住 provider 与 model（`--agent-provider zai --agent-model glm-5.3`，或环境变量 `PI_AGENT_PROVIDER`/`PI_AGENT_MODEL`）——否则无头运行继承 pi 的交互默认 provider，若其没有凭证会以一个不透明的上游 403 失败；裸 `--model` id 还可能在多个 provider 间歧义。其他选项：`--agent-iter N` 限定无状态修正轮数（默认 3），`--agent-eval <name>` 只跑一个用例以便低成本调试（名称无匹配时会显式报错而非静默跳过），`--agent-keep` 把每个用例的产物（Agent 写的 `gen.py` + SVG/PNG/PPTX + `score_report.txt`）保留到 `output/agent_replay/<name>/` 供复盘（已 gitignore）。
 
 ## 仓库结构
 

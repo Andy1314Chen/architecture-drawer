@@ -94,7 +94,7 @@ def pytest_addoption(parser):
     )
     parser.addoption(
         "--agent-model", action="store", default=None,
-        help="Pin the pi model for --agent-replay (e.g. glm-4.7). A bare model id "
+        help="Pin the pi model for --agent-replay (e.g. glm-5.3). A bare model id "
              "can be ambiguous across providers; pin the provider too. "
              "Env: PI_AGENT_MODEL.",
     )
