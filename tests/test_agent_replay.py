@@ -277,6 +277,9 @@ def test_agent_replay_quality(eval_cases, request):
     candidates = {
         n: d for n, d in eval_cases.items() if (d / "input.md").is_file()
     }
+    adhoc = request.config.getoption("--agent-case")
+    if adhoc and only:
+        pytest.fail("--agent-eval and --agent-case are mutually exclusive")
     if only:
         matched = {n: d for n, d in candidates.items() if n == only}
         if not matched:
@@ -285,6 +288,17 @@ def test_agent_replay_quality(eval_cases, request):
                 f"input.md spec; available: {', '.join(sorted(candidates))}"
             )
         candidates = matched
+    if adhoc:
+        p = Path(adhoc).expanduser().resolve()
+        if not (p / "input.md").is_file():
+            pytest.fail(
+                f"--agent-case {adhoc!r} has no input.md spec; expected a "
+                "directory containing input.md"
+            )
+        # RESTRICT to the ad-hoc case: appending to the frozen candidates
+        # (the naive wiring) silently replayed the whole 8-eval suite
+        # whenever --agent-eval was omitted.
+        candidates = {p.name: p}
     if not candidates:
         pytest.skip("no eval with an input.md spec to replay")
 

@@ -98,6 +98,13 @@ def pytest_addoption(parser):
              "can be ambiguous across providers; pin the provider too. "
              "Env: PI_AGENT_MODEL.",
     )
+    parser.addoption(
+        "--agent-case", action="store", default=None,
+        help="Ad-hoc replay case for --agent-replay: path to a directory "
+             "containing input.md, anywhere on disk. Unlike evals/ cases it "
+             "never enters the deterministic regression set (no gen.py, no "
+             "golden snapshot); the agent authors gen.py in the sandbox.",
+    )
 
 
 def pytest_configure(config):
