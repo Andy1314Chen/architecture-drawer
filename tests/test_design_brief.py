@@ -109,6 +109,25 @@ def test_honest_band_diagram_is_clean():
     assert not [c for c in _codes(res) if c.startswith("brief-")]
 
 
+def test_dup_geometry_adopts_dropped_identity():
+    """A frame/body rect pair (identical geometry, only the second carries
+    data-node-id) must not lose brief attribution — regression for the
+    brief-shape-missing / brief-layer-undeclared / brief-chain-broken
+    false-positive cascade when dedup dropped the id'd twin."""
+    d = SVGDrawer(600, 420)
+    d.arrow_head("ar", "#1b3a5c")
+    d.rect(20, 20, 560, 160, fill="#dae8fc", stroke="#1b3a5c", role="layer")
+    d.rect(20, 20, 560, 160, fill="#dae8fc", stroke="#1b3a5c",
+           node_id="api", role="layer")
+    d.rect(20, 230, 560, 160, fill="#d5e8d4", stroke="#1b3a5c",
+           node_id="engine", role="layer")
+    d.rect(60, 60, 100, 40, fill="white", stroke="#1b3a5c", node_id="t1")
+    d.rect(60, 270, 100, 40, fill="white", stroke="#1b3a5c", node_id="b1")
+    d.connect("t1", "bottom", "b1", "top", stroke="#1b3a5c", marker_end="ar")
+    codes = _codes(run_semantic_qa(d, brief=BRIEF))
+    assert not [c for c in codes if c.startswith("brief-")]
+
+
 def test_declared_key_missing_fails():
     brief = DesignBrief(palette_role={
         "api": ColorSpec("#dae8fc", "#1b3a5c"),

@@ -419,24 +419,32 @@ def _dedup_rects(rects, rect_roles=None, eps=0.5, aligned=None):
     card + its own text-frame aren't double-counted. rect_roles and any
     aligned list given in ``aligned`` (name -> list, 1:1 with rects, e.g.
     rect_ids / rect_paints) are filtered in lockstep so indices stay
-    aligned."""
+    aligned. A dropped twin's aligned identity (e.g. data-node-id) is
+    ADOPTED into the kept entry when the kept one lacks it — a frame/body
+    rect pair where only the second carries data-node-id must not lose its
+    brief-contract attribution."""
     out, out_roles, out_aligned = [], [], {k: [] for k in (aligned or {})}
     order = sorted(range(len(rects)),
                    key=lambda i: (rects[i].w * rects[i].h, rects[i].x, rects[i].y),
                    reverse=True)
     for orig in order:
         b = rects[orig]
-        dup = any(
-            abs(b.x - o.x) < eps and abs(b.y - o.y) < eps
-            and abs(b.w - o.w) < eps and abs(b.h - o.h) < eps
-            for o in out
-        )
-        if not dup:
+        hit = next(
+            (j for j, o in enumerate(out)
+             if abs(b.x - o.x) < eps and abs(b.y - o.y) < eps
+             and abs(b.w - o.w) < eps and abs(b.h - o.h) < eps),
+            None)
+        if hit is None:
             out.append(b)
             if rect_roles is not None:
                 out_roles.append(rect_roles[orig] if orig < len(rect_roles) else "")
             for k, seq in (aligned or {}).items():
                 out_aligned[k].append(seq[orig] if orig < len(seq) else None)
+        else:
+            for k, seq in (aligned or {}).items():
+                val = seq[orig] if orig < len(seq) else None
+                if val and not out_aligned[k][hit]:
+                    out_aligned[k][hit] = val
     if aligned is not None:
         return out, out_roles, out_aligned
     if rect_roles is not None:
