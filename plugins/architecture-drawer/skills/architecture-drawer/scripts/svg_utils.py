@@ -1181,3 +1181,43 @@ def layout_radial(hub, neighbors, center, radius, start_angle=-90.0):
         positions[nid] = (ncx - nw / 2, ncy - nh / 2, nw, nh)
         sides[nid] = _angle_to_side(ang)
     return positions, sides
+
+def layout_grid(n, x0, y0, cols, w, h, gx, gy):
+    """Rectangular grid: n cells in `cols` columns, left-to-right then
+    top-to-bottom. Pure geometry — returns [(x, y), ...] top-left coords;
+    the caller draws. Handles the common card-array arithmetic (chips in a
+    band, station rows) so the caller states the array, not 40 coordinates.
+    """
+    if cols < 1:
+        raise ValueError("layout_grid: cols must be >= 1")
+    return [(x0 + (i % cols) * (w + gx), y0 + (i // cols) * (h + gy))
+            for i in range(n)]
+
+
+def layout_row(items, x0, y0, gx):
+    """Single row of variable-size items along x.
+
+    items: list of widths. Returns [(x, y0, w), ...] left-to-right with `gx`
+    gutters — the arithmetic-free way to lay out a labelled flow
+    (source -> queue -> engine -> sink) or a chip row.
+    """
+    out, x = [], x0
+    for wd in items:
+        out.append((x, y0, wd))
+        x += wd + gx
+    return out
+
+def layout_band(title, x, y, w, h, pad=24, title_h=28):
+    """Band container geometry with a title slot reserved at the top.
+
+    Returns (body_x, body_y, body_w, body_h) — the drawable interior after
+    the title strip and padding, so contents laid out inside never collide
+    with the band title or edges. Pure geometry; the caller draws the rect.
+    `title` is accepted for self-documenting call sites; geometry does not
+    depend on it.
+    """
+    body_x = x + pad
+    body_y = y + title_h
+    body_w = w - 2 * pad
+    body_h = h - title_h - pad
+    return body_x, body_y, body_w, body_h

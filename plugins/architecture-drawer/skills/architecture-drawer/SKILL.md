@@ -36,6 +36,15 @@ exactly what they name (thresholds + repairs are tabulated in
 `references/checks_cheatsheet.md` — read that table instead of the
 evaluator source).
 
+**Do the arithmetic in code, not in your head.** `references/api_quickref.md`
+tabulates every DSL signature + the known traps (which default draws an
+arrow, text-y semantics, container `node_kind`), and the layout helpers
+(`layout_grid` / `layout_row` / `layout_band` / `layout_radial`) compute
+positions from the array spec — state "6 chips, 3 per row, 24px gutters",
+not forty hand-derived coordinates. Start from the skeleton in
+`references/gen_template.md` (constants block for bands/nodes/flow, fixed
+evaluate-export tail) instead of re-deriving the boilerplate.
+
 1. **Write the candidate** — resolve `$SKILL` (snippet above), pick ONE
    palette preset from `references/design_specs.md` (do not invent hex
    values), land the Step-1 design-brief tokens as a constants block atop

@@ -401,3 +401,28 @@ def test_port_spread_survives_relocate():
     assert ys[0] + ys[1] == pytest.approx(2 * d.nodes["hub"].cy, abs=1e-6)
     svg = d.render()
     assert f'y1="{ys[0]}"' in svg and f'y1="{ys[1]}"' in svg
+
+
+def test_layout_helpers_geometry():
+    """Layout primitives: pure geometry, contract-stable shapes."""
+    from svg_utils import layout_grid, layout_row, layout_band
+
+    # grid: 6 cells, 3 cols, 120x40 cards, 30/24 gutters
+    cells = layout_grid(6, 100, 200, 3, 120, 40, 30, 24)
+    assert len(cells) == 6
+    assert cells[0] == (100, 200)
+    assert cells[1] == (250, 200)          # x0 + 1*(120+30)
+    assert cells[3] == (100, 264)          # row 2: y0 + 1*(40+24)
+    # a full row is equally pitched (grid-array shape the refine guard protects)
+    xs = [c[0] for c in cells[:3]]
+    assert len({xs[k+1]-xs[k] for k in range(2)}) == 1
+
+    # row: variable widths with gutters
+    row = layout_row([100, 60, 140], 40, 300, 20)
+    assert row == [(40, 300, 100), (160, 300, 60), (240, 300, 140)]
+
+    # band: title strip + padding reserved
+    assert layout_band("t", 60, 120, 400, 160) == (84, 148, 352, 108)
+
+    with pytest.raises(ValueError):
+        layout_grid(4, 0, 0, 0, 10, 10, 5, 5)   # cols must be >= 1

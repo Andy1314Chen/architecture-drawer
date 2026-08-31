@@ -76,9 +76,13 @@ Strategy — the evaluator is the oracle. Do NOT read the evaluator/semantic_qa
 source files to internalize every threshold, and do NOT mentally verify the
 layout against all checks before writing: sketch an approximate layout, run
 `python3 gen.py`, read the report lines, and fix exactly what they name.
-Thresholds and repairs for all 16 checks are tabulated in the skill's
-`references/checks_cheatsheet.md` — read that table (and SKILL.md) instead of
-the source code. Budget: first candidate within a few minutes, then ≤2 focused
+Read (instead of any source code): `references/checks_cheatsheet.md` (every
+check's threshold + repair), `references/api_quickref.md` (DSL signatures +
+known traps + the layout helpers `layout_grid`/`layout_row`/`layout_band`/
+`layout_radial` that compute positions from an array spec), and start from
+the `references/gen_template.md` skeleton (constants block for bands/nodes/
+flow, fixed evaluate-export tail; deep literals >3 levels go in named
+constants). Budget: first candidate within a few minutes, then ≤2 focused
 repair rounds.
 
 When done, print the final score line.
