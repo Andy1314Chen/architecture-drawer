@@ -1505,12 +1505,42 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
     return final_score, report
 
 
+def _grid_row_members(nodes):
+    """Group nodes into equal-pitch grid rows/columns (>=3 members).
+
+    A row: same rounded y and height, x positions at a constant pitch (+/-2px).
+    A column: same rounded x and width, y positions at a constant pitch.
+    Members of such arrays are deliberately aligned; relocating one of them
+    independently breaks the alignment (and typically collides a neighbour).
+    """
+    def _axis_groups(items, key, other):
+        groups = {}
+        for n in items:
+            groups.setdefault((key(n), getattr(n, "h")), []).append(n)
+        members = set()
+        for grp in groups.values():
+            if len(grp) < 3:
+                continue
+            pos = sorted(other(n) for n in grp)
+            pitch = pos[1] - pos[0]
+            if pitch > 2 and all(abs((pos[k+1] - pos[k]) - pitch) <= 2 for k in range(len(pos)-1)):
+                members.update(id(n) for n in grp)
+        return members
+    rows = _axis_groups(nodes, lambda n: n.y, lambda n: n.x)
+    cols = _axis_groups(nodes, lambda n: n.x, lambda n: n.y)
+    return rows | cols
+
+
 def _fix_gutter(drawer, issue, iteration, fixes):
     """composition/gutter — pull the node toward the measured container center.
 
     The evidence carries the exact container rect (no re-parsing the SVG);
     the move is the per-axis deficit toward centering, which by construction
     clears min_gutter on the offending side when the node fits the container.
+    Grid-array members are refused: a station in an equal-pitch row/column is
+    aligned on purpose, and independent centering scatters the array (the
+    satellite replay incident: ground stations moved into a broken column,
+    new collisions, one full repair round burned on a non-bug).
     """
     nid = issue.subject
     node = drawer.nodes.get(nid)
@@ -1519,6 +1549,15 @@ def _fix_gutter(drawer, issue, iteration, fixes):
     cx, cy, cw, ch = issue.evidence["container"]
     if node.w > cw or node.h > ch:
         fixes.append(f"iter{iteration}: SKIP gutter fix for '{nid}' — node larger than its container; enlarge the container")
+        return False
+    # siblings inside the SAME container decide grid membership; nodes in
+    # other containers never matter.
+    siblings = [n for n in drawer.nodes.values()
+                if getattr(n, "role", "node") == "node" and n.id != nid
+                and cx <= n.x and n.x + n.w <= cx + cw
+                and cy <= n.y and n.y + n.h <= cy + ch]
+    if id(node) in _grid_row_members([node] + siblings):
+        fixes.append(f"iter{iteration}: SKIP gutter fix for '{nid}' — member of an equal-pitch grid row/column (alignment is intentional; fix gutters by moving the whole array)")
         return False
     # Centering the node clears the gutter on ALL sides at once; the check
     # fires on the minimum side, so this is the exact fix, not a heuristic.

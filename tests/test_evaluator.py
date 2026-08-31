@@ -217,3 +217,38 @@ def test_check_spacing_exempts_containment_pairs():
     fixes = []
     assert _fix_spacing(d, fake, 0, fixes) is False
     assert any("contains it" in f for f in fixes)
+
+
+def test_fix_gutter_protects_grid_arrays():
+    """An equal-pitch row/column is intentional alignment: centering one
+    member scatters the array and collides neighbours (the satellite replay
+    incident: ground stations moved into a broken column, new collisions, a
+    full repair round burned). A lone non-grid node must still be centered."""
+    import sys
+    sys.path.insert(0, str(SCRIPTS)) if str(SCRIPTS) not in sys.path else None
+    from svg_utils import SVGDrawer
+    from evaluator import _fix_gutter, _issue
+
+    d = SVGDrawer(width=1280, height=960)
+    d.rect(88, 816, 1104, 142, node_id="band_ground", node_kind="layer", role="layer")
+    for gx, nid in [(175, "s0"), (325, "s1"), (475, "s2"), (625, "s3"), (775, "s4"), (925, "s5")]:
+        d.rect(gx, 842, 120, 40, node_id=nid, node_kind="op")
+    fake = _issue("[composition] node 's0' gutter 12.0px < 20.0 in container.",
+                  code="composition/gutter", subject="s0",
+                  gutter=12.0, min_gutter=20.0, container=(88, 816, 1104, 142))
+    fixes = []
+    assert _fix_gutter(d, fake, 0, fixes) is False
+    assert any("grid" in f for f in fixes)
+    # array alignment preserved
+    xs = [d.nodes[n].x for n in ("s0", "s1", "s2", "s3", "s4", "s5")]
+    assert len(set(round(x) for x in ys)) if (ys := [d.nodes[n].y for n in ("s0","s1","s2")]) else False
+    assert all(abs((xs[k+1]-xs[k]) - 150) <= 2 for k in range(5))
+
+    d2 = SVGDrawer(width=800, height=400)
+    d2.rect(50, 50, 400, 200, node_id="band2", node_kind="layer", role="layer")
+    d2.rect(60, 150, 120, 40, node_id="lone", node_kind="op")
+    fake2 = _issue("[composition] node 'lone' gutter 10.0px < 20.0 in container.",
+                   code="composition/gutter", subject="lone",
+                   gutter=10.0, min_gutter=20.0, container=(50, 50, 400, 200))
+    fixes2 = []
+    assert _fix_gutter(d2, fake2, 0, fixes2) is True

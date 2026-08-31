@@ -85,7 +85,10 @@ understand every threshold, then mentally verifying the layout against all
 
 `auto_refine(drawer)` (in `evaluator.py`) handles checks 12 (gutter part),
 13, and the spacing part of the budget automatically — call it before any
-manual repair. Checks 7/10/11/12b (dangles, route-through, crossings,
+manual repair. It deliberately refuses two cases: containment pairs (a chip
+inside its card is the gutter rule's business) and equal-pitch grid arrays
+(>=3 aligned nodes — move the whole array instead; centering one member
+breaks the alignment). Checks 7/10/11/12b (dangles, route-through, crossings,
 edge-through-text) need manual rerouting: `connect()` side-to-side snapping
 plus junction nodes for fan-outs. Differently-sized peers are exempt from
 check 14; legend/background shapes and intentional in-box labels are exempt
