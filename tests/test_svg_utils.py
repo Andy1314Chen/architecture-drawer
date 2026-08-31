@@ -347,3 +347,57 @@ def test_edge_rebuild_emits_one_element():
     assert len(new_xmls) == 1  # rebuild returns exactly 1
     # relocating must succeed (no RuntimeError on the edge invariant)
     assert d.relocate_node("b", 300, 50) is True
+
+# --------------------------------------------------------------------------
+# Same-port deterministic spread (archify automaticPortSpread adaptation)
+# --------------------------------------------------------------------------
+def _fanout_drawer():
+    d = SVGDrawer(600, 400)
+    d.rect(50, 100, 200, 60, node_id="hub")   # right side: usable = 200-32 = 168
+    d.rect(400, 40, 80, 40, node_id="a")
+    d.rect(400, 220, 80, 40, node_id="b")
+    return d
+
+
+def test_port_spread_fans_out_same_side_edges():
+    """Two connect() edges leaving one node side must not stack on the single
+    border midpoint (which renders as one line and trips the duplicate-edge
+    check): they fan out symmetrically around it, in counterpart order."""
+    d = _fanout_drawer()
+    d.connect("hub", "right", "a", "left")
+    d.connect("hub", "right", "b", "left")
+    ys = sorted(e.start[1] for e in d.edges if e.from_id == "hub")
+    mid = d.nodes["hub"].cy
+    assert ys[0] != ys[1]
+    assert ys[0] + ys[1] == pytest.approx(2 * mid, abs=1e-6)  # symmetric
+    assert mid - ys[0] <= d.PORT_SPREAD_MAX_SPACING + 1e-6    # spacing capped
+    # Rendered SVG carries the same coords (registry ↔ SVG sync contract).
+    svg = d.render()
+    assert f'y1="{ys[0]}"' in svg and f'y1="{ys[1]}"' in svg
+
+
+def test_port_spread_skips_narrow_sides():
+    """A side shorter than 2*GUTTER cannot host a spread (spacing <= 0):
+    endpoints stay on the border midpoints (satellite's 30px squares)."""
+    d = SVGDrawer(600, 400)
+    d.rect(100, 100, 30, 30, node_id="g")
+    d.rect(50, 20, 60, 30, node_id="src")
+    d.rect(50, 220, 60, 30, node_id="gs3")
+    d.connect("src", "bottom", "g", "top")
+    d.connect("g", "bottom", "gs3", "top")
+    starts = [e.start for e in d.edges if e.from_id == "g"]
+    assert all(p[0] == d.nodes["g"].cx for p in starts)
+
+
+def test_port_spread_survives_relocate():
+    """relocate_node re-routes edges through _edge_rebuild, which folds in the
+    spread offsets — the fan-out must persist after the node moves."""
+    d = _fanout_drawer()
+    d.connect("hub", "right", "a", "left")
+    d.connect("hub", "right", "b", "left")
+    assert d.relocate_node("hub", 50, 150) is True
+    ys = sorted(e.start[1] for e in d.edges if e.from_id == "hub")
+    assert ys[0] != ys[1]
+    assert ys[0] + ys[1] == pytest.approx(2 * d.nodes["hub"].cy, abs=1e-6)
+    svg = d.render()
+    assert f'y1="{ys[0]}"' in svg and f'y1="{ys[1]}"' in svg

@@ -20,10 +20,10 @@ def _shape_visible(fill, stroke, opacity):
     return has_fill or has_stroke
 
 def _dash_attr(dashed):
-    """Convert a dashed flag/pattern to a stroke-dasharray SVG attribute.
+    """Normalize the ``dashed`` flag/pattern into a stroke-dasharray attribute.
 
-    dashed=False/None -> "" (solid). dashed=True -> the standard "6,3" pattern
-    (same as connect()). dashed="4,3" -> a custom dash pattern. This unifies
+    ``dashed=True`` means the standard "6,3" pattern; a non-empty string is
+    taken verbatim. Centralizing it gives one spelling for consistent
     dashed rendering across rect/circle/line/path/connect so callers never need
     the raw ``extra='stroke-dasharray="..."'`` spelling.
     """
@@ -242,16 +242,19 @@ class Node:
     def cy(self):
         return self.y + self.h / 2.0
 
-    def edge_point(self, side):
-        """Midpoint of a given border side."""
+    def edge_point(self, side, offset=0.0):
+        """Midpoint of a given border side, optionally shifted along the
+        border by ``offset`` px (positive = down/right along the border;
+        used by automatic port spreading so same-side edges fan out).
+        """
         if side == "top":
-            return (self.cx, self.y)
+            return (self.cx + offset, self.y)
         if side == "bottom":
-            return (self.cx, self.y + self.h)
+            return (self.cx + offset, self.y + self.h)
         if side == "left":
-            return (self.x, self.cy)
+            return (self.x, self.cy + offset)
         if side == "right":
-            return (self.x + self.w, self.cy)
+            return (self.x + self.w, self.cy + offset)
         raise ValueError(f"Unknown side: {side!r} (expected one of {Node.SIDES})")
 
     def border_distance(self, px, py):
@@ -291,6 +294,13 @@ class Edge:
         self.to_side = None
         self._emit_range = None    # (start, end) indices into drawer.elements
         self._rebuild_xml = None   # callable() -> list[str] (reads live node coords)
+        # Deterministic same-port spread offset for this edge's endpoints,
+        # keyed {(node_id, side): px_along_border}; assigned by
+        # SVGDrawer._spread_ports() when several connect() edges share one
+        # node side so they fan out symmetrically instead of stacking on the
+        # border midpoint (which reads as one thick line). See
+        # PORT_SPREAD_* constants near SVGDrawer.
+        self._spread_offsets = {}
 
     @property
     def length(self):
@@ -869,6 +879,76 @@ class SVGDrawer:
                f'{marker}{role_attr} {extra} />')
         return xml, None
 
+    # Port-spread constants (see _apply_port_spread): deterministic fan-out
+    # of same-side connect() endpoints, so N edges leaving one node side do
+    # not stack on the single border midpoint.
+    PORT_SPREAD_GUTTER = 16.0     # px reserved at each end of a border side
+    PORT_SPREAD_MAX_SPACING = 14.0  # px cap between adjacent spread ports
+
+    def _port_group(self, node_id, side):
+        """All top-level connect() edges attached to (node_id, side)."""
+        return [e for e in self.edges
+                if e._rebuild_xml is not None
+                and ((e.from_id == node_id and e.from_side == side)
+                     or (e.to_id == node_id and e.to_side == side))]
+
+    def _apply_port_spread(self, node_id, side):
+        """Deterministically spread same-side edge endpoints along a border.
+
+        When several connect() edges share one node side, their endpoints
+        would all land on the border midpoint and render as one stacked
+        line (flagged downstream as duplicate edges). Instead, order the
+        edges by their counterpart node's position along the border, then
+        offset each endpoint symmetrically around the midpoint:
+
+            usable  = side_length - 2*PORT_SPREAD_GUTTER
+            spacing = min(PORT_SPREAD_MAX_SPACING, usable / (n - 1))
+            offset_i = (i - (n-1)/2) * spacing
+
+        Edges on a side shorter than 2*gutter (spacing <= 0) keep midpoints.
+        Each affected edge is re-emitted through its own _rebuild_xml (the
+        same mechanism relocate_node uses), so the rendered SVG and the
+        Edge registry stay in sync. Group-drawn edges are skipped (their
+        coordinates are local; same capability boundary as relocate_node).
+        """
+        group = self._port_group(node_id, side)
+        if len(group) < 2:
+            return
+        node = self.nodes[node_id]
+        vertical = side in ("left", "right")   # offset runs along y
+        extent = node.h if vertical else node.w
+
+        def sort_key(e):
+            other_id = e.to_id if e.from_id == node_id else e.from_id
+            other = self.nodes.get(other_id)
+            along = (other.cy if vertical else other.cx) if other else 0.0
+            return (along, e.id or "")
+
+        group.sort(key=sort_key)
+        usable = extent - 2.0 * self.PORT_SPREAD_GUTTER
+        if len(group) > 1:
+            spacing = min(self.PORT_SPREAD_MAX_SPACING, usable / (len(group) - 1))
+        else:
+            spacing = 0.0
+        if spacing <= 0:
+            return
+        for i, e in enumerate(group):
+            e._spread_offsets = {**e._spread_offsets,
+                                 (node_id, side): (i - (len(group) - 1) / 2.0) * spacing}
+            self._reemit_edge(e)
+
+    def _reemit_edge(self, edge):
+        """Re-run an edge's _rebuild_xml and splice the result in place."""
+        if edge._rebuild_xml is None or edge._emit_range is None:
+            return
+        s, t = edge._emit_range
+        xmls, (nstart, nend, npath_d) = edge._rebuild_xml()
+        if len(xmls) != t - s:
+            raise RuntimeError(
+                f"_reemit_edge('{edge.id}'): rebuild emitted {len(xmls)} "
+                f"elements, expected {t - s}")
+        self.elements[s:t] = xmls
+        edge.start, edge.end, edge.path_d = nstart, nend, npath_d
     def connect(self, from_id, from_side, to_id, to_side,
                 stroke="black", stroke_width=1.5, marker_end="arrowhead",
                 edge_id=None, edge_label=None, as_curve=False, curve_dir=None,
@@ -903,18 +983,29 @@ class SVGDrawer:
         edge.to_id, edge.to_side = to_id, to_side
         if self._current_matrix == IDENTITY:
             edge._emit_range = (estart, len(self.elements))
+
             def _edge_rebuild():
                 # Recompute endpoints from the nodes' live border midpoints so
                 # a re-route after relocate_node() lands on the moved border.
+                # Same-port spread offsets (assigned by _apply_port_spread)
+                # are folded in so rebuilds preserve the fan-out.
                 # Returns (xml_list, (start, end, path_d)) so the caller can
                 # refresh both the rendered SVG and the Edge registry.
-                rs = self.nodes[from_id].edge_point(from_side)
-                re_ = self.nodes[to_id].edge_point(to_side)
+                rs = self.nodes[from_id].edge_point(
+                    from_side, edge._spread_offsets.get((from_id, from_side), 0.0))
+                re_ = self.nodes[to_id].edge_point(
+                    to_side, edge._spread_offsets.get((to_id, to_side), 0.0))
                 rxml, rpath_d = self._edge_xml(
                     rs, re_, stroke, stroke_width, marker_end, dashed,
                     as_curve, curve_dir, role)
                 return [rxml], (rs, re_, rpath_d)
+
             edge._rebuild_xml = _edge_rebuild
+            # Same-port spread: recompute the fan-out for both endpoint
+            # groups this edge joined, so every sibling edge is re-emitted
+            # with its assigned offset. No-op for the first edge on a side.
+            self._apply_port_spread(from_id, from_side)
+            self._apply_port_spread(to_id, to_side)
         return start, end
 
     # ------------------------------------------------------------------
