@@ -27,6 +27,15 @@ specification sections before the first candidate runs — the checks below
 tell you what to fix, and each section explains its own vocabulary when a
 report line names it.
 
+**Strategy — the evaluator is the oracle, not your own verification.** Do
+not read `scripts/evaluator.py` to internalize every threshold, and do not
+mentally verify the layout against all 16 checks before writing: that
+duplicates work the evaluator does in under a second. Sketch an approximate
+layout with sane coordinates, run `gen.py`, read the report lines, and fix
+exactly what they name (thresholds + repairs are tabulated in
+`references/checks_cheatsheet.md` — read that table instead of the
+evaluator source).
+
 1. **Write the candidate** — resolve `$SKILL` (snippet above), pick ONE
    palette preset from `references/design_specs.md` (do not invent hex
    values), land the Step-1 design-brief tokens as a constants block atop

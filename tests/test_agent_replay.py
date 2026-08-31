@@ -72,17 +72,29 @@ and `semantic_qa`, and:
   `svg2pptx.svg_to_pptx`;
 - write only `gen.py` and its artifacts; do not edit `input.md` or the skill.
 
+Strategy — the evaluator is the oracle. Do NOT read the evaluator/semantic_qa
+source files to internalize every threshold, and do NOT mentally verify the
+layout against all checks before writing: sketch an approximate layout, run
+`python3 gen.py`, read the report lines, and fix exactly what they name.
+Thresholds and repairs for all 16 checks are tabulated in the skill's
+`references/checks_cheatsheet.md` — read that table (and SKILL.md) instead of
+the source code. Budget: first candidate within a few minutes, then ≤2 focused
+repair rounds.
+
 When done, print the final score line.
 """
 
 _AGENT_REFINE = """\
 If `gen.py` is missing or does not run, create or fix it first — follow the
 architecture-drawer skill and the spec in `input.md`. Otherwise `gen.py` still
-has evaluator `[FAIL]` or `[WARN]` items, or scores below 100: re-read it, run
-it (`python3 gen.py`) to see the current score and report, then fix the issues
-by adjusting coordinates, layout, and edge routing — do NOT add suppressions or
-silence checks. Re-run until the score is 100 with no `[FAIL]`. Re-export the
-SVG/PNG/PPTX triplet next to `gen.py`, then print the final score line.
+has evaluator `[FAIL]` or `[WARN]` items, or scores below 100: run it
+(`python3 gen.py`) to see the current score and report — every report line
+names its defect class and is mapped to a threshold and repair in the skill's
+`references/checks_cheatsheet.md` — then fix exactly what the lines name by
+adjusting coordinates, layout, and edge routing. Do NOT add suppressions or
+silence checks, and do NOT re-read the evaluator source code. Re-run until
+the score is 100 with no `[FAIL]`. Re-export the SVG/PNG/PPTX triplet next
+to `gen.py`, then print the final score line.
 """
 
 
