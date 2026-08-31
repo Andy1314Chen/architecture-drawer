@@ -189,5 +189,5 @@ def test_auto_refine_fixes_from_evidence():
                 if isinstance(i, Issue) and i.code == "composition/gutter"]
     # And the rendered SVG carries the moved coordinates.
     svg = d.render()
-    assert 'x="230.0"' in svg          # b stays; c pushed right by 9
-    assert 'x="475.0"' in svg or 'x="476.0"' in svg  # centered 'a': 10+(200-60)/2
+    assert 'x="466.0"' not in svg      # b stays at 400; c moved off 466
+    assert 'x="80.0"' in svg           # centered 'a': 10 + (200-60)/2
