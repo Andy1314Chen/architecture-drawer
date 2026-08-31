@@ -20,6 +20,40 @@ if _SKILL not in sys.path:
     sys.path.insert(0, _SKILL)
 ```
 
+## Fast Path (read this first; details below are on-demand reference)
+
+Ordinary generation follows this bounded loop. Do not read the full
+specification sections before the first candidate runs — the checks below
+tell you what to fix, and each section explains its own vocabulary when a
+report line names it.
+
+1. **Write the candidate** — resolve `$SKILL` (snippet above), pick ONE
+   palette preset from `references/design_specs.md` (do not invent hex
+   values), land the Step-1 design-brief tokens as a constants block atop
+   `gen.py`, draw with `drawer.rect/circle/connect` (register `node_id`s so
+   connections validate), then immediately run the script. One clear main
+   flow beats a dense map; ≤12 primary nodes before the first evaluation.
+2. **Evaluate** — `evaluate_svg(drawer)` prints the score; every `[FAIL]`
+   line names the defect class (dangle / route-through / crossing / text
+   overlap / contrast / palette). Fix exactly what the lines name; the
+   Auto-Correction section maps each tag to its repair.
+3. **Bounded repair** — at most **2 focused correction rounds** on the
+   highest-penalty FAILs (call `auto_refine(drawer)` first: gutter and
+   spacing fix themselves). If the score reaches ≥80 with no `[FAIL]`
+   remaining, ship. If two rounds do not converge, stop and report the
+   unresolved `[FAIL]` lines truthfully — never claim success with defects
+   outstanding, and never widen the canvas or shrink text to hide them.
+
+```dot
+digraph fastpath {
+    "write candidate" -> "evaluate_svg()" -> "auto_refine + fix FAILs";
+    "auto_refine + fix FAILs" -> "evaluate_svg()" [label="round ≤2"];
+    "auto_refine + fix FAILs" -> "ship (score≥80, 0 FAIL)" [label="clean"];
+    "auto_refine + fix FAILs" -> "report unresolved FAILs truthfully"
+        [label="2 rounds spent"];
+}
+```
+
 ## Step 0 — Intent Judgment (fidelity vs. completion)
 
 Before writing any code, classify the requirement — the two failure modes are
