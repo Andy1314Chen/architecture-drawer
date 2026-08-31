@@ -9,6 +9,33 @@ import html
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from svg_utils import BBox
 
+class Issue(str):
+    """A diagnostic line that is ALSO machine-readable.
+
+    Renders byte-identically to the plain report strings every existing
+    consumer (gen.py prints, regression score parser, agent prompts) expects,
+    while carrying structured fields for programmatic repair:
+      code     — stable rule id ("spacing/too-close", "composition/gutter");
+      subject  — the node/edge id the finding is about;
+      evidence — measured numbers the fix should use ({gap, min_gap, ...}).
+    auto_refine dispatches on `code` and sizes its fixes from `evidence`
+    instead of regexing the human sentence (archify's structured-diagnostics
+    pattern, adapted to the string-report contract).
+    """
+    __slots__ = ("code", "subject", "evidence")
+
+    def __new__(cls, text, code="", subject=None, evidence=None):
+        obj = super().__new__(cls, text)
+        obj.code = code
+        obj.subject = subject
+        obj.evidence = dict(evidence or {})
+        return obj
+
+
+def _issue(text, code="", subject=None, **evidence):
+    """Shorthand: build an Issue carrying its rule code and measured evidence."""
+    return Issue(text, code=code, subject=subject, evidence=evidence)
+
 
 def bbox_union_area(bboxes):
     """Area of the union of rectangles (scanline / sweep algorithm).
@@ -578,10 +605,13 @@ def check_spacing(drawer, min_gap=14.0, kinds=("op", "junction")):
             dy = max(a.y - (b.y + b.h), b.y - (a.y + a.h), 0.0)
             gap = math.hypot(dx, dy)
             if gap < min_gap:
-                issues.append(
+                issues.append(_issue(
                     f"[spacing] '{a.id}' and '{b.id}' only {gap:.1f}px apart "
-                    f"(< {min_gap})."
-                )
+                    f"(< {min_gap}).",
+                    code="spacing/too-close", subject=b.id,
+                    a=a.id, gap=round(gap, 1), min_gap=min_gap,
+                    axis="x" if dx > dy else "y",
+                ))
     return issues
 
 
@@ -849,7 +879,12 @@ def check_composition(drawer, max_bends=2, max_route_stretch=1.35,
         gutter = min(node.x - c[0], c[0]+c[2]-(node.x+node.w),
                      node.y - c[1], c[1]+c[3]-(node.y+node.h))
         if gutter < min_gutter:
-            warn.append(f"[composition] node '{nid}' gutter {gutter:.1f}px < {min_gutter} in container.")
+            warn.append(_issue(
+                f"[composition] node '{nid}' gutter {gutter:.1f}px < {min_gutter} in container.",
+                code="composition/gutter", subject=nid,
+                gutter=round(gutter, 1), min_gutter=min_gutter,
+                container=(c[0], c[1], c[2], c[3]),
+            ))
 
     # text as obstacle: any edge segment passes through a <text> bbox
     tboxes = _text_bboxes(svg)
@@ -1460,6 +1495,62 @@ def evaluate_svg(drawer, conn_tolerance=12.0):
     return final_score, report
 
 
+def _fix_gutter(drawer, issue, iteration, fixes):
+    """composition/gutter — pull the node toward the measured container center.
+
+    The evidence carries the exact container rect (no re-parsing the SVG);
+    the move is the per-axis deficit toward centering, which by construction
+    clears min_gutter on the offending side when the node fits the container.
+    """
+    nid = issue.subject
+    node = drawer.nodes.get(nid)
+    if node is None:
+        return False
+    cx, cy, cw, ch = issue.evidence["container"]
+    if node.w > cw or node.h > ch:
+        fixes.append(f"iter{iteration}: SKIP gutter fix for '{nid}' — node larger than its container; enlarge the container")
+        return False
+    # Centering the node clears the gutter on ALL sides at once; the check
+    # fires on the minimum side, so this is the exact fix, not a heuristic.
+    nx = cx + (cw - node.w) / 2.0
+    ny = cy + (ch - node.h) / 2.0
+    if drawer.relocate_node(nid, nx, ny):
+        fixes.append(f"iter{iteration}: centered '{nid}' in container (gutter {issue.evidence['gutter']} -> {min((cw - node.w) / 2.0, (ch - node.h) / 2.0):.1f}px)")
+        return True
+    fixes.append(f"iter{iteration}: SKIP gutter fix for '{nid}' — non-relocatable shape (drawn in a group, or database/decision/hexagon/component/cloud)")
+    return False
+
+
+def _fix_spacing(drawer, issue, iteration, fixes):
+    """spacing/too-close — push the subject node clear of its peer along the
+    measured separation axis, by exactly the measured deficit (+1px slack)."""
+    nid, peer_id = issue.subject, issue.evidence["a"]
+    node, peer = drawer.nodes.get(nid), drawer.nodes.get(peer_id)
+    if node is None or peer is None:
+        return False
+    need = issue.evidence["min_gap"] + 1.0 - issue.evidence["gap"]
+    if issue.evidence["axis"] == "x":
+        # Push away along x, in the direction the node already leans.
+        direction = 1.0 if node.cx >= peer.cx else -1.0
+        nx = node.x + direction * need
+        ny = node.y
+    else:
+        direction = 1.0 if node.cy >= peer.cy else -1.0
+        nx = node.x
+        ny = node.y + direction * need
+    if drawer.relocate_node(nid, nx, ny):
+        fixes.append(f"iter{iteration}: pushed '{nid}' {need:.1f}px clear of '{peer_id}' along {issue.evidence['axis']}")
+        return True
+    fixes.append(f"iter{iteration}: SKIP spacing fix for '{nid}' — non-relocatable shape (drawn in a group, or database/decision/hexagon/component/cloud)")
+    return False
+
+
+_REFINE_DISPATCH = {
+    "composition/gutter": _fix_gutter,
+    "spacing/too-close": _fix_spacing,
+}
+
+
 def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbose=False):
     """Iteratively evaluate + auto-fix common issues until target or max_iter.
 
@@ -1470,13 +1561,19 @@ def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbo
     rect/circle nodes currently support relocation; other shapes return False
     and are skipped (reported, not silently ignored).
 
+    Dispatch is evidence-driven, not text-driven: each auto-fixable check
+    (check_spacing, check_composition's gutter rule) emits an Issue carrying
+    a stable code + measured evidence; the fixers below read `issue.code` /
+    `issue.evidence` directly. No report-string regex remains, and fix
+    magnitudes come from the measurement (exact centering / exact deficit
+    +1px slack), replacing the old heuristic (+0.3 nudge / fixed +20px).
+
     Auto-fixable categories (programmatic; complex routing left to the caller):
-      - text overflow container: cannot auto-fix raw add_element text (no handle);
-        reports it instead. Only d.text()-drawn labels with known geometry can wrap.
-      - gutter too small: nudge the node toward its container center.
-      - too close (spacing): push the second node along the major axis by min_gap.
-    Returns (final_score, report, fixes_applied) where fixes_applied is a list of
-    human-readable actions taken. Non-fixable issues remain in the report.
+      - composition/gutter: center the node inside the measured container.
+      - spacing/too-close: push the node clear of its peer by the exact gap
+        deficit along the measured separation axis.
+    Returns (final_score, report, fixes_applied) where fixes_applied is a
+    list of human-readable actions taken. Non-fixable issues stay in the
     """
     fixes = []
     for iteration in range(max_iter):
@@ -1484,48 +1581,17 @@ def auto_refine(drawer, target_score=100, max_iter=3, conn_tolerance=12.0, verbo
         if score >= target_score:
             break
         changed = False
-        for line in report:
-            # gutter: "node 'X' gutter Npx < M in container" -> nudge node inward
-            m = _re.search(r"\[composition\] node '([^']+)' gutter ([\-\d.]+)px < ([\d.]+) in container", line)
-            if m:
-                nid, gap_str, need_str = m.group(1), float(m.group(2)), float(m.group(3))
-                if nid in drawer.nodes:
-                    node = drawer.nodes[nid]
-                    # find the container rect (smallest containing background/layer)
-                    svg = drawer.render()
-                    ncx, ncy = node.cx, node.cy
-                    rects = []
-                    for attrs in _re.findall(r'<rect ([^>]*)/>', svg):
-                        p = dict(_re.findall(r'([\w-]+)="([^"]*)"', attrs))
-                        try:
-                            rx, ry = float(p['x']), float(p['y'])
-                            rw, rh = float(p['width']), float(p['height'])
-                        except (KeyError, ValueError):
-                            continue
-                        if p.get('data-graph-role', '') in ('background', 'layer') and rx <= ncx <= rx+rw and ry <= ncy <= ry+rh:
-                            rects.append((rx, ry, rw, rh))
-                    if rects:
-                        c = min(rects, key=lambda r: r[2]*r[3])
-                        # nudge toward container center by the deficit
-                        ccx, ccy = c[0]+c[2]/2, c[1]+c[3]/2
-                        dx = (ccx - ncx) * 0.3
-                        dy = (ccy - ncy) * 0.3
-                        if drawer.relocate_node(nid, node.x + dx, node.y + dy):
-                            fixes.append(f"iter{iteration}: nudged '{nid}' by ({dx:.1f},{dy:.1f}) toward container center")
-                            changed = True
-                        else:
-                            fixes.append(f"iter{iteration}: SKIP gutter fix for '{nid}' — non-relocatable shape (drawn in a group, or database/decision/hexagon/component/cloud)")
-            # too close: "spacing ... 'A' and 'B' only Npx apart" -> push B along x
-            m = _re.search(r"\[spacing\] '([^']+)' and '([^']+)' only ([\d.]+)px", line)
-            if m:
-                a, b, gap = m.group(1), m.group(2), float(m.group(3))
-                if a in drawer.nodes and b in drawer.nodes:
-                    nb = drawer.nodes[b]
-                    if drawer.relocate_node(b, nb.x + 20, nb.y):  # push right by a gap increment
-                        fixes.append(f"iter{iteration}: pushed '{b}' +20px to clear '{a}'")
-                        changed = True
-                    else:
-                        fixes.append(f"iter{iteration}: SKIP spacing fix for '{b}' — non-relocatable shape (drawn in a group, or database/decision/hexagon/component/cloud)")
+        # Collect raw Issue objects straight from the checks (the rendered
+        # report wraps them in indented plain strings, dropping the type);
+        # evidence-driven dispatch reads .code/.evidence directly.
+        issues = [i for i in check_spacing(drawer) if isinstance(i, Issue)]
+        _, comp_warn = check_composition(drawer)
+        issues += [i for i in comp_warn if isinstance(i, Issue)]
+        for issue in issues:
+            fixer = _REFINE_DISPATCH.get(issue.code)
+            if fixer is not None:
+                if fixer(drawer, issue, iteration, fixes):
+                    changed = True
         if not changed:
             break
         if verbose:

@@ -135,3 +135,59 @@ def test_floor_survives_the_real_drawer():
     d2.rect(50, 50, 500, 120, fill="#ffffff", stroke="#546e7a", stroke_width=2)
     issues2 = check_palette(d2)
     assert any("no chromatic accent" in s for s in issues2)
+
+
+def _refine_drawer():
+    """Two INDEPENDENT violation scenarios on one canvas.
+
+    Left: node 'a' (60x30) sits 5px off the left edge of its 200x120 layer
+    band (gutter 5 < 20) — centering it clears the gutter without touching
+    anything else. Right: nodes 'b'/'c' are 6px apart on x (spacing 6 < 14);
+    pushing 'c' +9px clears it. The two zones are far apart so one fixer's
+    output never creates the other's violation."""
+    d = SVGDrawer(600, 400)
+    d.rect(10, 10, 200, 120, fill="#eef2f7", stroke="#1b3a5c", role="layer",
+           node_id="band", bbox=False)
+    d.rect(15, 40, 60, 30, fill="white", stroke="#1b3a5c", node_id="a")
+    d.rect(400, 40, 60, 30, fill="white", stroke="#1b3a5c", node_id="b")
+    d.rect(466, 40, 60, 30, fill="white", stroke="#1b3a5c", node_id="c")
+    return d
+
+
+def test_issues_carry_codes_and_evidence():
+    """The auto-fixable checks emit Issue objects: stable code + measured
+    evidence, while rendering byte-identically to the legacy strings."""
+    from evaluator import check_spacing, check_composition, Issue
+    d = _refine_drawer()
+    sp = [i for i in check_spacing(d) if isinstance(i, Issue)]
+    assert any(i.code == "spacing/too-close" for i in sp)
+    tgt = [i for i in sp if i.code == "spacing/too-close"][0]
+    assert tgt.evidence["gap"] == 6.0
+    assert tgt.evidence["min_gap"] == 14.0
+    assert isinstance(tgt, str) and "[spacing]" in tgt  # legacy rendering intact
+
+    _, warn = check_composition(d)
+    gut = [i for i in warn if isinstance(i, Issue) and i.code == "composition/gutter"]
+    assert gut, "expected a gutter Issue for node 'a'"
+    assert gut[0].evidence["container"] == (10.0, 10.0, 200.0, 120.0)
+
+
+def test_auto_refine_fixes_from_evidence():
+    """Gutter fix centers 'a' in its band; spacing fix pushes 'c' clear of
+    'b' by the exact deficit — both sized from the measured evidence, and
+    the violations disappear from the follow-up report."""
+    from evaluator import auto_refine, check_spacing, check_composition, Issue
+    d = _refine_drawer()
+    score, report, fixes = auto_refine(d, target_score=100, max_iter=3)
+    assert any("centered 'a'" in f for f in fixes)
+    assert any("'c'" in f and "along x" in f for f in fixes)
+    # Violations are gone in the final report.
+    assert not [i for i in check_spacing(d)
+                if isinstance(i, Issue) and i.code == "spacing/too-close"]
+    _, warn = check_composition(d)
+    assert not [i for i in warn
+                if isinstance(i, Issue) and i.code == "composition/gutter"]
+    # And the rendered SVG carries the moved coordinates.
+    svg = d.render()
+    assert 'x="230.0"' in svg          # b stays; c pushed right by 9
+    assert 'x="475.0"' in svg or 'x="476.0"' in svg  # centered 'a': 10+(200-60)/2
