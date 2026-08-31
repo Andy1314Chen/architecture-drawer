@@ -191,3 +191,29 @@ def test_auto_refine_fixes_from_evidence():
     svg = d.render()
     assert 'x="466.0"' not in svg      # b stays at 400; c moved off 466
     assert 'x="80.0"' in svg           # centered 'a': 10 + (200-60)/2
+
+
+def test_check_spacing_exempts_containment_pairs():
+    """A chip fully inside its card is a legal layout: its clearance is the
+    gutter rule's job, not sibling spacing. Regression guard for the replay
+    incident where slots inside server_context were flagged '0.0px apart',
+    auto_refine then pushed them into a collision (score 81 -> 41)."""
+    import sys
+    sys.path.insert(0, str(SCRIPTS)) if str(SCRIPTS) not in sys.path else None
+    from svg_utils import SVGDrawer
+    from evaluator import check_spacing, _fix_spacing, _issue
+
+    d = SVGDrawer(width=1280, height=900)
+    d.rect(408, 681, 500, 110, node_id="server_context", node_kind="op")
+    for k in range(4):
+        d.rect(432 + k * 120, 735, 96, 40, node_id=f"slot_{k}", node_kind="op")
+    # container<->slot pairs exempt; slot<->slot kept 24px apart -> no issues
+    assert check_spacing(d) == []
+
+    # a fabricated pre-fix issue on a containment pair must be refused
+    fake = _issue("[spacing] 'slot_0' and 'server_context' only 0.0px apart (< 14.0).",
+                  code="spacing/too-close", subject="slot_0", a="server_context",
+                  gap=0.0, min_gap=14.0, axis="y")
+    fixes = []
+    assert _fix_spacing(d, fake, 0, fixes) is False
+    assert any("contains it" in f for f in fixes)

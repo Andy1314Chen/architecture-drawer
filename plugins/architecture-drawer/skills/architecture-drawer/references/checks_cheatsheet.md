@@ -36,7 +36,7 @@ quality polish — fix when cheap, never suppress.
 | 11 | Edge crossings | Two edge polylines cross in their interiors | 8/pair, cap 40 | Reroute one edge; a hub junction node often kills crossings |
 | 12 | Composition budget | >2 bends, >1.35× route stretch, gutter <20px, segment <16px | 2/issue (WARN), cap 12 | Straighten the route; widen the container gutter |
 | 12b | Edge-through-text | Edge segment passes through a `<text>` bbox | 8/issue, cap 24 | Reroute the edge around the label |
-| 13 | Same-kind spacing | Two `op`/`junction` nodes <14px apart (Euclidean gap) | 4/issue, cap 20 | Spread nodes; `auto_refine` fixes this automatically |
+| 13 | Same-kind spacing | Two `op`/`junction` nodes <14px apart (Euclidean gap); a chip fully inside its card is exempt (gutter rule owns it) | 4/issue, cap 20 | Spread nodes; `auto_refine` fixes this automatically |
 | 14 | Peer alignment | Same-sized same-kind peers in a row/column sharing no edge/center line (5px / 15%) | 3/issue, cap 15 | Snap the row/column to shared edges |
 | 15 | Type scale | >4 distinct font sizes, or adjacent tiers <1.15× apart | 4/issue, cap 8 | Use 3–4 tiers (e.g. 20/14/12/10); merge near-duplicate sizes |
 | 16 | Palette | >8 accents (hard 12); zero chromatic accents; gray-dominance (<35% business elements chromatic AND <15% painted area) | 4/issue; FAIL beyond hard cap / colorless / gray-dominant | Use a preset from `design_specs.md`; color must own bands or nodes, not just chips |

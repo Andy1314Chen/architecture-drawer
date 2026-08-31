@@ -593,14 +593,24 @@ def check_edge_node_collisions(drawer, interior_margin=3.0, conn_tolerance=12.0)
 def check_spacing(drawer, min_gap=14.0, kinds=("op", "junction")):
     """Flag same-kind nodes closer than `min_gap` px (Euclidean gap).
 
-    Container/containment pairs are excluded by restricting to sibling kinds
-    (op-vs-op, junction-vs-junction), so an op inside a layer is not penalised.
+    Geometric containment pairs (a chip fully inside its card) are exempt:
+    their clearance is the container-gutter rule's job (check_composition),
+    not a same-kind sibling-spacing bug.
     """
     issues = []
     nodes = [n for n in drawer.nodes.values() if n.kind in kinds and getattr(n, "role", "node") == "node"]
+    def _contains(big, small):
+        """True when *small*'s four edges all lie inside *big* — the same
+        containment test check_composition's gutter rule uses. A chip fully
+        inside its card is a legal (and common) layout, not a spacing bug:
+        its distance to the container is judged by the gutter rule instead."""
+        return (big.x <= small.x and small.x + small.w <= big.x + big.w
+                and big.y <= small.y and small.y + small.h <= big.y + big.h)
     for i in range(len(nodes)):
         for j in range(i + 1, len(nodes)):
             a, b = nodes[i], nodes[j]
+            if _contains(a, b) or _contains(b, a):
+                continue  # containment pair: gutter rule owns it, not spacing
             dx = max(a.x - (b.x + b.w), b.x - (a.x + a.w), 0.0)
             dy = max(a.y - (b.y + b.h), b.y - (a.y + a.h), 0.0)
             gap = math.hypot(dx, dy)
@@ -1523,10 +1533,20 @@ def _fix_gutter(drawer, issue, iteration, fixes):
 
 def _fix_spacing(drawer, issue, iteration, fixes):
     """spacing/too-close — push the subject node clear of its peer along the
-    measured separation axis, by exactly the measured deficit (+1px slack)."""
+    measured separation axis, by exactly the measured deficit (+1px slack).
+
+    Containment pairs (chip inside its card) are refused: pushing a chip out
+    of its own container invents a collision — the gutter rule owns those."""
     nid, peer_id = issue.subject, issue.evidence["a"]
     node, peer = drawer.nodes.get(nid), drawer.nodes.get(peer_id)
     if node is None or peer is None:
+        return False
+    contained = lambda big, small: (
+        big.x <= small.x and small.x + small.w <= big.x + big.w
+        and big.y <= small.y and small.y + small.h <= big.y + big.h)
+    if contained(node, peer) or contained(peer, node):
+        fixes.append(f"iter{iteration}: SKIP spacing fix for '{nid}' — '{peer_id}' "
+                     f"contains it (containment pair; gutter rule owns clearance)")
         return False
     need = issue.evidence["min_gap"] + 1.0 - issue.evidence["gap"]
     if issue.evidence["axis"] == "x":
